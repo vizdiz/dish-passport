@@ -6,7 +6,14 @@ import math
 from datetime import datetime, timezone
 from typing import Optional, Sequence
 
-from app.ports import DishRecord, ImpressionRow, Neighbor, NormalizedDish, SvdModel
+from app.ports import (
+    DishRecord,
+    ImpressionRow,
+    Neighbor,
+    NormalizedDish,
+    SvdModel,
+    TasteProfile,
+)
 
 
 def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
@@ -32,6 +39,7 @@ class InMemoryDishRepository:
         self._dish_factors: dict[int, tuple[list[float], str]] = {}
         self._cf_user: dict[int, tuple[list[float], str]] = {}
         self._cf_item: dict[int, tuple[list[float], str]] = {}
+        self._taste: dict[int, TasteProfile] = {}
         self._next_dish = 1
         self._next_log = 1
 
@@ -157,6 +165,75 @@ class InMemoryDishRepository:
 
     async def get_cf_item_factors(self, dish_id: int) -> Optional[tuple[list[float], str]]:
         return self._cf_item.get(dish_id)
+
+    async def all_cf_item_factors(self) -> list[tuple[int, list[float]]]:
+        return [(dish_id, list(vec)) for dish_id, (vec, _) in self._cf_item.items()]
+
+    # ---- recommendation / taste profiles (Service 5) ----
+    async def all_user_ids(self) -> list[int]:
+        return sorted(self._user_log_count)
+
+    async def user_logs(self, user_id: int) -> list[tuple[int, str]]:
+        return [(log["dish_id"], log["sentiment"]) for log in self._logs
+                if log["user_id"] == user_id]
+
+    async def user_impressions(self, user_id: int):
+        return [(imp.dish_id, imp.shown_at, imp.converted) for imp in self._impressions
+                if imp.user_id == user_id]
+
+    async def dish_embeddings(self, dish_ids: Sequence[int]) -> dict[int, list[float]]:
+        out: dict[int, list[float]] = {}
+        for dish_id in dish_ids:
+            rec = self._dishes.get(dish_id)
+            if rec is not None:
+                out[dish_id] = list(rec[1])
+        return out
+
+    async def vector_topk(
+        self, embedding: Sequence[float], k: int, exclude_ids: Sequence[int]
+    ) -> list[Neighbor]:
+        excluded = set(exclude_ids)
+        scored = [
+            Neighbor(dish=rec, cosine=_cosine(embedding, emb))
+            for dish_id, (rec, emb) in self._dishes.items()
+            if dish_id not in excluded
+        ]
+        scored.sort(key=lambda nb: nb.cosine, reverse=True)
+        return scored[:k]
+
+    async def centroid_cosines(
+        self,
+        dish_ids: Sequence[int],
+        liked_centroid: Sequence[float],
+        disliked_centroid: Optional[Sequence[float]],
+    ) -> dict[int, tuple[float, float]]:
+        out: dict[int, tuple[float, float]] = {}
+        for dish_id in dish_ids:
+            rec = self._dishes.get(dish_id)
+            if rec is None:
+                continue
+            emb = rec[1]
+            cos_liked = _cosine(emb, liked_centroid)
+            cos_disliked = _cosine(emb, disliked_centroid) if disliked_centroid else 0.0
+            out[dish_id] = (cos_liked, cos_disliked)
+        return out
+
+    async def popular_dishes(self, k: int, exclude_ids: Sequence[int]) -> list[int]:
+        excluded = set(exclude_ids)
+        counts: dict[int, int] = {}
+        for log in self._logs:
+            counts[log["dish_id"]] = counts.get(log["dish_id"], 0) + 1
+        ranked = sorted(
+            (d for d in counts if d not in excluded),
+            key=lambda d: counts[d], reverse=True,
+        )
+        return ranked[:k]
+
+    async def save_taste_profile(self, profile: TasteProfile) -> None:
+        self._taste[profile.user_id] = profile
+
+    async def get_taste_profile(self, user_id: int) -> Optional[TasteProfile]:
+        return self._taste.get(user_id)
 
     # ---- test / local helpers (not part of the port) ----
     def seed_dish(

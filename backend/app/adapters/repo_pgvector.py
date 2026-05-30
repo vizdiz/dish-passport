@@ -12,7 +12,14 @@ from typing import Optional, Sequence
 import asyncpg
 from pgvector.asyncpg import register_vector
 
-from app.ports import DishRecord, ImpressionRow, Neighbor, NormalizedDish, SvdModel
+from app.ports import (
+    DishRecord,
+    ImpressionRow,
+    Neighbor,
+    NormalizedDish,
+    SvdModel,
+    TasteProfile,
+)
 
 _DISH_COLS = (
     "id, name, canonical_description, ingredients, prep_method, "
@@ -26,6 +33,10 @@ async def init_connection(conn: asyncpg.Connection) -> None:
     await conn.set_type_codec(
         "jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog"
     )
+
+
+def _vec_or_none(v) -> Optional[list[float]]:
+    return [float(x) for x in v] if v is not None else None
 
 
 def _to_record(row: asyncpg.Record) -> DishRecord:
@@ -252,3 +263,116 @@ class PgVectorRepository:
         if row is None:
             return None
         return ([float(x) for x in row["factors"]], row["model_version"])
+
+    async def all_cf_item_factors(self) -> list[tuple[int, list[float]]]:
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch("SELECT dish_id, factors FROM cf_item_factors")
+        return [(r["dish_id"], [float(x) for x in r["factors"]]) for r in rows]
+
+    # ---- recommendation / taste profiles (Service 5) ----
+    async def all_user_ids(self) -> list[int]:
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch("SELECT id FROM users ORDER BY id")
+        return [r["id"] for r in rows]
+
+    async def user_logs(self, user_id: int) -> list[tuple[int, str]]:
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT dish_id, sentiment FROM logs WHERE user_id = $1 ORDER BY id", user_id
+            )
+        return [(r["dish_id"], r["sentiment"]) for r in rows]
+
+    async def user_impressions(self, user_id: int):
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT dish_id, shown_at, converted FROM impressions WHERE user_id = $1", user_id
+            )
+        return [(r["dish_id"], r["shown_at"], r["converted"]) for r in rows]
+
+    async def dish_embeddings(self, dish_ids: Sequence[int]) -> dict[int, list[float]]:
+        if not dish_ids:
+            return {}
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT id, embedding FROM dishes WHERE id = ANY($1::bigint[])", list(dish_ids)
+            )
+        return {r["id"]: [float(x) for x in r["embedding"]] for r in rows}
+
+    async def vector_topk(
+        self, embedding: Sequence[float], k: int, exclude_ids: Sequence[int]
+    ) -> list[Neighbor]:
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                f"SELECT {_DISH_COLS}, 1 - (embedding <=> $1) AS cosine "
+                f"FROM dishes WHERE id <> ALL($2::bigint[]) "
+                f"ORDER BY embedding <=> $1 LIMIT $3",
+                list(embedding), list(exclude_ids), k,
+            )
+        return [Neighbor(dish=_to_record(row), cosine=float(row["cosine"])) for row in rows]
+
+    async def centroid_cosines(
+        self,
+        dish_ids: Sequence[int],
+        liked_centroid: Sequence[float],
+        disliked_centroid: Optional[Sequence[float]],
+    ) -> dict[int, tuple[float, float]]:
+        if not dish_ids:
+            return {}
+        async with self._pool.acquire() as conn:
+            if disliked_centroid is None:
+                rows = await conn.fetch(
+                    "SELECT id, 1 - (embedding <=> $1) AS cl FROM dishes "
+                    "WHERE id = ANY($2::bigint[])",
+                    list(liked_centroid), list(dish_ids),
+                )
+                return {r["id"]: (float(r["cl"]), 0.0) for r in rows}
+            rows = await conn.fetch(
+                "SELECT id, 1 - (embedding <=> $1) AS cl, 1 - (embedding <=> $3) AS cd "
+                "FROM dishes WHERE id = ANY($2::bigint[])",
+                list(liked_centroid), list(dish_ids), list(disliked_centroid),
+            )
+        return {r["id"]: (float(r["cl"]), float(r["cd"])) for r in rows}
+
+    async def popular_dishes(self, k: int, exclude_ids: Sequence[int]) -> list[int]:
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT dish_id, count(*) AS c FROM logs WHERE dish_id <> ALL($1::bigint[]) "
+                "GROUP BY dish_id ORDER BY c DESC, dish_id LIMIT $2",
+                list(exclude_ids), k,
+            )
+        return [r["dish_id"] for r in rows]
+
+    async def save_taste_profile(self, profile: TasteProfile) -> None:
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO user_taste_profiles "
+                "(user_id, liked_centroid, disliked_centroid, flavor_factor_pref, n_dishes, updated_at) "
+                "VALUES ($1, $2, $3, $4, $5, now()) "
+                "ON CONFLICT (user_id) DO UPDATE SET "
+                "liked_centroid = EXCLUDED.liked_centroid, "
+                "disliked_centroid = EXCLUDED.disliked_centroid, "
+                "flavor_factor_pref = EXCLUDED.flavor_factor_pref, "
+                "n_dishes = EXCLUDED.n_dishes, updated_at = now()",
+                profile.user_id,
+                list(profile.liked_centroid) if profile.liked_centroid is not None else None,
+                list(profile.disliked_centroid) if profile.disliked_centroid is not None else None,
+                list(profile.flavor_factor_pref) if profile.flavor_factor_pref is not None else None,
+                profile.n_dishes,
+            )
+
+    async def get_taste_profile(self, user_id: int) -> Optional[TasteProfile]:
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT user_id, liked_centroid, disliked_centroid, flavor_factor_pref, n_dishes "
+                "FROM user_taste_profiles WHERE user_id = $1",
+                user_id,
+            )
+        if row is None:
+            return None
+        return TasteProfile(
+            user_id=row["user_id"],
+            liked_centroid=_vec_or_none(row["liked_centroid"]),
+            disliked_centroid=_vec_or_none(row["disliked_centroid"]),
+            flavor_factor_pref=_vec_or_none(row["flavor_factor_pref"]),
+            n_dishes=row["n_dishes"],
+        )

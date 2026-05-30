@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app import deps
-from app.routers import dishes, impressions, logs
+from app.routers import dishes, impressions, logs, recommendations, users
 
 logger = logging.getLogger("dishport")
 
@@ -60,6 +60,8 @@ app = FastAPI(title="Dish Passport — Ingestion", version="0.1.0", lifespan=lif
 app.include_router(logs.router)
 app.include_router(dishes.router)
 app.include_router(impressions.router)
+app.include_router(recommendations.router)
+app.include_router(users.router)
 
 
 @app.get("/health", tags=["meta"])

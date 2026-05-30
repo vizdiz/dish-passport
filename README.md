@@ -6,11 +6,10 @@ A dish is a *shared, canonical* thing: many users, one dish. Every log points at
 canonical catalog entry, so the user×dish matrix overlaps and collaborative filtering
 (later service) has something to chew on.
 
-> **Build status:** **Services 1–4** (this repo) — Ingestion, Similarity, Flavor+SVD, CF/ALS.
-> The dedup gate, ports/adapters, `/logs` · `/impressions` · `GET /dishes/{id}` (with the
-> 4-factor projection) · `GET /dishes/{id}/similar` · `PATCH /logs/{id}/flavor`, plus the
-> batch jobs `recompute_svd` and `retrain_als` (confidence-weighted implicit ALS). The
-> recommendation ensemble (5) — which *reads* the CF factors — is the remaining backend piece.
+> **Build status:** **Backend complete — Services 1–5** (this repo): Ingestion, Similarity,
+> Flavor+SVD, CF/ALS, Recommendation. Full API below, three batch jobs (`recompute_svd`,
+> `retrain_als`, `rebuild_taste_profiles`), 45 tests green + every adapter verified on real
+> Postgres+pgvector. Remaining: Celery Beat wiring and the React Native client.
 > See [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Service 1 — Ingestion (the dedup gate)
@@ -53,8 +52,10 @@ uvicorn app.main:app --reload                            # http://localhost:8000
 
 # batch jobs — scheduler-triggered in prod; manual entry points for now:
 psql "$DP_DATABASE_URL" -f migrations/003_cf.sql
+psql "$DP_DATABASE_URL" -f migrations/004_taste_profiles.sql
 PYTHONPATH=. python scripts/run_recompute_svd.py         # fit flavor SVD + per-dish factors
 PYTHONPATH=. python scripts/run_retrain_als.py           # confidence-weighted ALS factors
+PYTHONPATH=. python scripts/run_rebuild_taste_profiles.py  # centroids + factor prefs
 ```
 
 ## Test
@@ -74,6 +75,8 @@ pytest -q          # dedup gate + endpoints, on in-memory fakes (no DB, no keys)
 | GET | `/dishes/{id}` | — | dish detail + 4-factor projection (lets the optimistic client reconcile the canonical id) |
 | GET | `/dishes/{id}/similar?n=` | — | pure big-vector cosine neighbors, self excluded (Service 2) |
 | PATCH | `/logs/{id}/flavor` | `{flavor: {dim: 0..1}}` | user refines the 10 flavor dims (Service 3) |
+| GET | `/recommendations?user_id=&n=` | — | the ensemble + per-item flavor-factor explanation (Service 5) |
+| GET | `/users/{id}/taste-profile` | — | factor prefs + representative dishes (Service 5) |
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for the system design and decisions, and
 [MORNING_REVIEW.md](./MORNING_REVIEW.md) for the overnight build log + QA checklist.

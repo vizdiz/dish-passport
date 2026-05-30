@@ -25,7 +25,7 @@
 | **2** | **Similarity** — `/dishes/{id}/similar`, pure big-vector | **✅ built** |
 | **3** | **Flavor + SVD** — refine, fit, project, explain | **✅ built** |
 | **4** | **CF** — ALS batch (confidence-weighted) | **✅ built** |
-| 5 | Recommend — ensemble, ramp, filter disliked | pending |
+| **5** | **Recommend** — ensemble, ramp, filter disliked | **✅ built** |
 
 The rest of this document describes Service 1 in detail; later sections sketch the system
 the remaining services slot into.
@@ -143,6 +143,41 @@ New tables (`migrations/002_flavor_svd.sql`): `flavor_svd_model`, `dish_flavor_f
   the same dish merely unseen by a similar user.
 
 New tables (`migrations/003_cf.sql`): `cf_user_factors`, `cf_item_factors`.
+
+### 3.7 Service 5 — Recommendation (online ensemble) + taste profiles (batch)
+
+`GET /recommendations?user_id=&n=` — **retrieve then rank, never score the whole catalog**:
+
+- **Cold start** (`log_count < 5` or no liked centroid): pure vector. Query `vector_topk` on the
+  liked centroid; if there's no profile yet, union `similar()` of the last few logged dishes;
+  a brand-new user falls back to popularity. Drop logged + disliked. Rank by cosine.
+- **Warm**: candidates = `vector_topk(liked_centroid)` ∪ `ALS top-K(xᵤ·yᵢ)` ∪ a little
+  popularity. Drop logged + disliked. Score each:
+  `w_cf·cf + w_cb·cb + w_vec·vec`, every signal **min-max normalized over the candidate set**;
+  `cb` (Rocchio) `= cos(dish, liked) − 0.4·cos(dish, disliked)`. Weights **ramp on log_count**
+  (`<5 → 0/0/1`; `5→20 → w_cf 0.2→0.5, w_cb 0.3, w_vec remainder`; `≥20 → 0.6/0.3/0.1`).
+- **Explanations come from flavor factors** (project the dish, name its dominant factor's side
+  from the data-derived label, note alignment with the user's `flavor_factor_pref`) — **never**
+  the embedding.
+
+`GET /users/{id}/taste-profile` — labeled factor prefs + representative dishes (nearest the
+liked centroid), 404 until a profile exists.
+
+**Batch `rebuild_taste_profiles`** (`app/services/taste.py`): `liked_centroid` = mean embedding
+of liked/neutral dishes; `disliked_centroid` = disliked dishes (weight 1) + **non-converted
+impressions as decaying soft negatives** (half-life 14d); `flavor_factor_pref` = mean latent
+factors over liked dishes. Disliked dishes are filtered from recs **and** fed as signal — both.
+
+CF/SVD factors and profiles are **read** on the request path; nothing is trained online.
+New table (`migrations/004_taste_profiles.sql`): `user_taste_profiles`.
+
+## 8a. Backend status & what's left
+
+All five services are built, unit-tested (45 tests on in-memory fakes), and verified
+end-to-end against real Postgres+pgvector via the `scripts/smoke_*.py` checks. Not yet done:
+**Celery Beat** wiring for the three batch jobs (they run today via `scripts/run_*.py`),
+real provider keys (OpenAI/Anthropic — the gate's mint path and embeddings need them), and the
+**React Native client**. Auth is still the stubbed `user_id`.
 
 ## 4. Decisions made autonomously (review these)
 

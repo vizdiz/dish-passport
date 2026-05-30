@@ -111,6 +111,29 @@ class ImpressionsResponse(BaseModel):
     ingested: int
 
 
+class RecommendationOut(BaseModel):
+    dish: DishOut
+    score: float
+    explanation: str                    # from flavor factors, never the embedding
+    components: dict[str, float]         # normalized signal contributions {cf, cb, vec}
+
+
+class RecommendationsResponse(BaseModel):
+    user_id: int
+    n: int
+    cold_start: bool
+    recommendations: list[RecommendationOut]
+
+
+class TasteProfileOut(BaseModel):
+    user_id: int
+    n_dishes: int
+    flavor_factor_pref: Optional[list[FactorScore]]
+    representative_dishes: list[DishOut]
+    has_liked_centroid: bool
+    has_disliked_centroid: bool
+
+
 def flavor_to_dict(flavor: list[float]) -> dict[str, float]:
     """Map a length-10 flavor vector to {dim: score}, rounding for transport."""
     return {dim: round(float(v), 4) for dim, v in zip(FLAVOR_DIMS, flavor)}

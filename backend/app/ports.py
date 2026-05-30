@@ -56,6 +56,15 @@ class SvdModel:
 
 
 @dataclass(frozen=True)
+class TasteProfile:
+    user_id: int
+    liked_centroid: Optional[list[float]]      # 1536, or None if no positive logs
+    disliked_centroid: Optional[list[float]]   # 1536, or None
+    flavor_factor_pref: Optional[list[float]]  # 4, mean latent factors over liked dishes
+    n_dishes: int
+
+
+@dataclass(frozen=True)
 class ImpressionRow:
     user_id: int
     dish_id: int
@@ -118,3 +127,24 @@ class DishRepository(Protocol):
     ) -> None: ...
     async def get_cf_user_factors(self, user_id: int) -> Optional[tuple[list[float], str]]: ...
     async def get_cf_item_factors(self, dish_id: int) -> Optional[tuple[list[float], str]]: ...
+    async def all_cf_item_factors(self) -> list[tuple[int, list[float]]]: ...
+
+    # ---- recommendation / taste profiles (Service 5) ----
+    async def all_user_ids(self) -> list[int]: ...
+    async def user_logs(self, user_id: int) -> list[tuple[int, str]]: ...   # (dish_id, sentiment)
+    async def user_impressions(
+        self, user_id: int
+    ) -> list[tuple[int, datetime, bool]]: ...                              # (dish_id, shown_at, converted)
+    async def dish_embeddings(self, dish_ids: Sequence[int]) -> dict[int, list[float]]: ...
+    async def vector_topk(
+        self, embedding: Sequence[float], k: int, exclude_ids: Sequence[int]
+    ) -> list[Neighbor]: ...
+    async def centroid_cosines(
+        self,
+        dish_ids: Sequence[int],
+        liked_centroid: Sequence[float],
+        disliked_centroid: Optional[Sequence[float]],
+    ) -> dict[int, tuple[float, float]]: ...                                # id -> (cos_liked, cos_disliked)
+    async def popular_dishes(self, k: int, exclude_ids: Sequence[int]) -> list[int]: ...
+    async def save_taste_profile(self, profile: TasteProfile) -> None: ...
+    async def get_taste_profile(self, user_id: int) -> Optional[TasteProfile]: ...
