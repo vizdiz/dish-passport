@@ -1,147 +1,130 @@
-# Morning review — Dish Passport, Service 1 (Ingestion)
+# Morning review — Dish Passport backend (Services 1–5 complete)
 
-Built overnight, autonomously. **Scope: Service 1 only** (the dedup gate), per "Go! Service 1".
-Stopped here on purpose — Services 2–5 and the frontend involve per-service decisions
-(τ calibration, factor labeling, ALS hyperparameters, `n` defaults) that the spec says to
-shape with you rather than guess. A concrete Service 2 plan is at the bottom.
+Built overnight, autonomously, down the spec's build order. **The entire backend is done:**
+the dedup gate, similarity, flavor+SVD, CF/ALS, and the recommendation ensemble — full API,
+three batch jobs, **45 unit tests green**, and **every adapter verified end-to-end on real
+Postgres+pgvector**.
 
-**Remote:** https://github.com/vizdiz/dish-passport (private) · branch `main`, 2 commits.
-
----
-
-## TL;DR — what's done
-
-- ✅ Dedup gate: `dish_id` fast lane (zero LLM/embed) | normalize → embed description →
-  nearest → **link** (cos ≥ τ, reuse flavor) or **mint** (cos < τ, scored flavor).
-- ✅ Ports/adapters: gate depends only on `ports.py`; adapters for pgvector (asyncpg, `<=>`),
-  in-memory, OpenAI embeddings, Anthropic one-call normalizer (SDKs imported lazily).
-- ✅ Endpoints: `POST /logs`, `POST /impressions`, `GET /dishes/{id}` (+ `/health`).
-- ✅ `migrations/001_init.sql`: users/dishes/logs/impressions + HNSW cosine index.
-- ✅ **17 unit tests green** on in-memory fakes (no DB, no keys).
-- ✅ **Verified end-to-end on a real Postgres+pgvector** (Docker): `<=>` cosine, log_count
-  bump, impressions, and lifespan wiring over HTTP.
+**Remote:** https://github.com/vizdiz/dish-passport (private) · `main` · 7 commits, one per service.
 
 ---
 
-## Run it yourself
+## What's built, service by service
 
-> ⚠️ **Environment note:** the Homebrew `python@3.12` on this machine has a broken `pyexpat`
-> (`Symbol not found: _XML_SetAllocTrackerActivationThreshold`), which breaks `pip`/`ensurepip`
-> inside venvs. I worked around it with a **uv-managed CPython 3.12** (clean, isolated). If you
-> use plain `python3 -m venv`, you'll hit the same wall — use uv, or `brew reinstall python@3.12`.
+| # | Service | Endpoints / jobs | Verified |
+|---|---------|------------------|----------|
+| 1 | **Ingestion** | `POST /logs`, `POST /impressions`, `GET /dishes/{id}` | dedup gate: paraphrase links, kindred al-pastor/shawarma (0.85) stays apart at τ=0.90, fast lane zero-LLM |
+| 2 | **Similarity** | `GET /dishes/{id}/similar?n=` | pure big-vector neighbors, self excluded, cosine-ranked |
+| 3 | **Flavor + SVD** | `PATCH /logs/{id}/flavor`, batch `recompute_svd`, factors on `GET /dishes/{id}` | data-derived labels (`sour+fresh ↔ rich+sweet`), online projection w/o refit |
+| 4 | **CF / ALS** | batch `retrain_als` | confidence-weighted iALS; **disliked (−0.004) < unseen (+0.23)** on stored factors |
+| 5 | **Recommendation** | `GET /recommendations`, `GET /users/{id}/taste-profile`, batch `rebuild_taste_profiles` | cold/warm ramp, drops logged+disliked, flavor-factor explanations |
+
+Architecture is **ports/adapters**: every service depends only on `app/ports.py`; swapping
+Postgres / OpenAI / Anthropic is an adapter change. `repo_memory` backs all tests; `repo_pgvector`
+(asyncpg, cosine via `<=>`, jsonb codec) is the real one.
+
+---
+
+## Run it
+
+> ⚠️ **The Homebrew `python@3.12` here is broken** (`pyexpat` symbol error → breaks pip/venv).
+> I used a **uv-managed CPython 3.12**. Use uv, or `brew reinstall python@3.12`.
 
 ### Tests (no DB, no keys)
 ```bash
 cd backend
-uv venv .venv --python 3.12 --python-preference only-managed   # or your own working 3.12
+uv venv .venv --python 3.12 --python-preference only-managed
 uv pip install -p .venv/bin/python -r requirements-dev.txt
-.venv/bin/python -m pytest -q                                   # 17 passed
+.venv/bin/python -m pytest -q          # 45 passed
 ```
 
-### The app + real DB
+### Full stack + batch jobs + integration smokes
 ```bash
-# 5432 was taken on this machine (an unrelated timescaledb container), so I used 5433:
+# 5432 was taken by an unrelated container, so I used 5433:
 DP_DB_PORT=5433 docker compose up -d
 export DP_DATABASE_URL=postgresql://dishport:dishport@localhost:5433/dishport
-psql "$DP_DATABASE_URL" -f backend/migrations/001_init.sql
+for m in 001_init 002_flavor_svd 003_cf 004_taste_profiles; do
+  psql "$DP_DATABASE_URL" -f backend/migrations/$m.sql; done
 
-# integration smokes (deterministic vectors, no keys needed):
 cd backend
-DP_DATABASE_URL=$DP_DATABASE_URL PYTHONPATH=. .venv/bin/python scripts/smoke_pgvector.py
-DP_DATABASE_URL=$DP_DATABASE_URL PYTHONPATH=. .venv/bin/python scripts/smoke_http.py
+for s in smoke_pgvector smoke_svd smoke_cf smoke_recommend; do
+  DP_DATABASE_URL=$DP_DATABASE_URL PYTHONPATH=. .venv/bin/python scripts/$s.py; done
 
-# real server (needs provider keys for the text/mint path; fast lane works without):
+# the API (fast lane / reads work with just a DB; mint path needs provider keys):
 export DP_OPENAI_API_KEY=...  DP_ANTHROPIC_API_KEY=...
 .venv/bin/uvicorn app.main:app --reload     # http://localhost:8000/docs
 ```
 
-> **Heads up:** I left the Docker DB running on **port 5433** with smoke-test seed data
-> (dishes 1 = Al Pastor, 2 = Miso Soup). Stop it with `docker compose down` (add `-v` to wipe
-> `pgdata/`). The unrelated `correctness-bench-postgres-1` on 5432 was left untouched.
+> I **left the Docker DB running on port 5433** with smoke seed data. `docker compose down`
+> to stop (`-v` wipes `pgdata/`). The unrelated `correctness-bench-postgres-1` on 5432 is untouched.
 
 ---
 
-## Test results (captured)
+## Evidence captured (real pgvector, no keys)
 
 ```
-17 passed in 0.02s
-```
+# Service 1/2 — dedup + similarity
+nearest(0.97·A) -> Al Pastor 0.9700 [LINK]   nearest(0.85·A) -> 0.8500 [would MINT]
+similar(A) -> [('Carnitas', 0.50), ('Miso Soup', 0.20)]   (self excluded, ranked)
 
-Dedup gate coverage (`tests/test_dedup_gate.py`):
-- fast lane links with **zero** embedder/normalizer calls; unknown `dish_id` → `DishNotFound`
-- empty catalog mints; paraphrase (cos 0.97) links; distinct (cos 0.20) mints
-- **kindred cross-cuisine (al pastor ~ shawarma, cos 0.85) is NOT collapsed** — the headline guarantee
-- τ boundary is inclusive (`>=`): cos == τ links, a hair below mints (uses the repo's own cosine to dodge float ambiguity)
-- link reuses the **canonical** dish's flavor (discards the paraphrase's scored flavor)
-- log_count bumps; sentiment/rating recorded; every decision (mint/link/fastlane) is logged with cosine + τ
+# Service 3 — data-derived factor labels
+factor 0: sour+fresh ↔ rich+sweet   factor 1: fermented+umami ↔ fresh+sweet  ...
+stored factors == online re-projection ✓
 
-Real pgvector smoke (`scripts/smoke_pgvector.py`, against Docker):
+# Service 4 — disliked is NOT unseen
+score(user2 disliked d1) = -0.0040   score(user3 unseen d1) = +0.2297
+
+# Service 5 — ensemble
+recommend(user1) cold=False -> D5 'high rich+bitter', D6 'high herbaceous+smoky', ...
+  (excludes logged D0-D4 and disliked D9)
+recommend(user999) cold=True  -> D0..D4 (popularity)
 ```
-nearest(0.97·A) -> Al Pastor cosine=0.9700   (>= 0.90 τ => LINK)
-nearest(0.85·A) -> Al Pastor cosine=0.8500   (<  0.90 τ => MINT — kindred stays distinct)
-user 1 log_count = 2 ; impressions ingested = 2
-```
-HTTP smoke (`scripts/smoke_http.py`): `/health`, `GET /dishes/1`, fast-lane `POST /logs`,
-`POST /impressions` all 200 with PgVectorRepository wired by the lifespan.
 
 ---
 
 ## Decisions made autonomously (please sanity-check)
 
-1. **asyncpg + raw SQL**, not an ORM — two vector queries don't need one; keeps `<=>` explicit.
-2. **One combined Anthropic call** (tool-use, forced structured output) returns
-   `canonical_name + cuisine-blind description + ingredients + prep_method + flavor[10]`.
-3. **Providers are real (OpenAI/Anthropic); test doubles live only in `tests/`.** No offline
-   provider shim in `app/`. Running the mint path needs both keys; `pytest` needs neither.
-4. **Lazy "unconfigured" providers** so the fast lane / reads work with only a DB wired (the
-   "no LLM, no embed" promise holds at the DI layer too). Mint/link fails loudly if a key's missing.
-5. **`repo_memory` is a first-class adapter**, not just a mock — it backs every test.
-6. **Auth is stubbed:** `user_id` in the body stands in for the authenticated subject;
-   `insert_log` upserts the user row. Not security-reviewed.
-7. **Built a slightly larger suite than the spec's "13"** (17) — extra coverage on the τ
-   boundary, flavor reuse, per-decision logging, and the no-provider fast lane.
-
-## Assumptions worth a glance
-
-- Repo name `dish-passport`, **private**, under `vizdiz`.
-- Set a local `git config user.name "Vismay Ravikumar"` (global name was empty; email was set).
-- Commits carry **no `Co-Authored-By` trailer** (per your instruction; saved to memory).
+- **asyncpg + raw SQL** (no ORM); **one combined Anthropic tool-use call** (normalize + cuisine-blind
+  description + 10-dim flavor); **dedup on the description** with a zero-LLM `dish_id` fast lane.
+- **Providers are real (OpenAI/Anthropic); test doubles live only in `tests/`.** Lazy
+  "unconfigured" providers so the fast lane / reads work with only a DB wired.
+- **NumPy, not libraries**, for SVD (`linalg.svd`) and ALS (Hu/Koren/Volinsky closed form) —
+  no fragile native deps, exact control over the confidence weighting.
+- **Data-driven factor labels** (from loadings); **content-hash model versions**; deterministic
+  SVD signs and seeded ALS init so versions/factors reproduce.
+- **CF aggregation of repeat logs**: positive vs negative weight, ties go positive; `k` clamps to
+  `min(#users, #items)`.
+- **Recommend**: signals min-max normalized over the candidate set; β=0.4; soft-neg impression
+  half-life 14d; explanations strictly from flavor factors.
+- **Auth is stubbed** (`user_id` in the request = the subject; `insert_log` upserts the user).
+- **One `DishRepository` port** grew to ~30 methods across services — pragmatic, but a candidate
+  to split (DishRepo / FactorRepo / ProfileRepo) if you prefer.
 
 ---
+
+## What's NOT done (next candidates)
+
+1. **Celery Beat wiring.** The three batch jobs run today via `scripts/run_*.py`; they need a
+   `celery_app` + beat schedule + Redis to be truly scheduler-triggered (spec §2). Redis is not
+   in `docker-compose.yml` yet.
+2. **Real provider keys.** The mint path and real embeddings need `DP_OPENAI_API_KEY` /
+   `DP_ANTHROPIC_API_KEY`. Until then the cross-cuisine similarity *quality* proof (ceviche≈larb)
+   can't be seen — only the gate mechanics are exercised (synthetic vectors).
+3. **React Native client.** Nothing built yet — `tokens.ts` → primitives → DishCard /
+   FlavorFingerprint / SentimentControl → Feed/Log/Taste. The impression seam is ready server-side.
+4. **Auth**, photo→S3, and a `seed.py` of real dishes.
 
 ## QA checklist for our session
 
-- [ ] Read `ARCHITECTURE.md` §3–4 — agree on the gate shape + the asyncpg/one-call decisions.
-- [ ] Skim `app/services/ingestion.py` (the whole gate is ~90 lines) and `tests/test_dedup_gate.py`.
-- [ ] Decide: wire **real** OpenAI + Claude and re-run the smokes to see actual cosines
-      (the offline smokes use synthetic vectors; the cross-cuisine *quality* proof needs real embeddings).
-- [ ] Confirm `DEDUP_TAU = 0.90` after we eyeball a real cosine distribution (that's what
-      Service 2 is for — see plan below).
-- [ ] Confirm the stubbed `user_id` auth is fine for the next couple of services.
+- [ ] Skim `app/services/{ingestion,recommend,cf,flavor_svd}.py` — the load-bearing logic.
+- [ ] Run the 4 integration smokes (above) and eyeball the printed evidence.
+- [ ] Decide whether to wire real keys + re-run `calibrate_tau.py` to lock `DEDUP_TAU` from data.
+- [ ] Pick the next track: **Celery scheduler**, **frontend**, or **provider keys + real-data calibration**.
+- [ ] Sanity-check the autonomous decisions above (esp. CF weighting, ramp priors, β, soft-neg half-life).
 
-## Open questions (also in ARCHITECTURE.md §7)
+## Open questions
 
-1. Wire real providers now, or stay on fakes until after this review?
-2. Is the stubbed `user_id` acceptable through Services 2–3?
-3. `DEDUP_TAU` = 0.90 — lock it, or calibrate from real data via Service 2 first?
-4. On `link`, strictly reuse the canonical flavor (current) or blend (running average)?
-
----
-
-## Recommended next: Service 2 — Similarity (ready to start)
-
-Smallest, highest-signal next step; the spec says build it second to *see* the embedding
-thesis hold and to **calibrate `DEDUP_TAU` empirically**.
-
-- **Endpoint:** `GET /dishes/{id}/similar?n=` — pure pgvector cosine neighbors, **self excluded**,
-  no CF, no flavor.
-- **Repo:** add `DishRepository.similar(dish_id, n) -> list[Neighbor]`
-  (`ORDER BY embedding <=> (SELECT embedding FROM dishes WHERE id=$1) WHERE id != $1 LIMIT n`);
-  in-memory mirror for tests.
-- **Tests:** self-exclusion; ordering by descending cosine; `n` cap; 404 on missing dish;
-  a fixture that asserts a known kindred pair surfaces (ceviche ≈ larb) once real embeddings exist.
-- **Calibration deliverable:** a small script that prints the cosine between seeded kindred
-  pairs (al pastor/shawarma, ceviche/larb) so we can pick τ from data, not vibes.
-
-Say the word (or hand me the Service 2 spec) and I'll build it the same way: propose the tiny
-data/endpoint delta, then implement + test.
+1. Wire real OpenAI + Claude now? (needed for the cross-cuisine similarity quality proof)
+2. `DEDUP_TAU` = 0.90, β = 0.4, ALS α = 40 / k = 16, soft-neg half-life 14d — lock these or tune on real data?
+3. Split the `DishRepository` god-port, or leave it?
+4. Frontend next, or Celery/scheduler first?
