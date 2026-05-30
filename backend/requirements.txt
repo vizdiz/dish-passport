@@ -1,0 +1,9 @@
+# Runtime deps for Service 1 (Ingestion).
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pydantic-settings>=2.3
+asyncpg>=0.29
+pgvector>=0.3.6
+openai>=1.40
+anthropic>=0.40

@@ -1,0 +1,33 @@
+# ---- Python / backend ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+*.log
+
+# ---- Node / frontend ----
+node_modules/
+.expo/
+.expo-shared/
+dist/
+web-build/
+*.tsbuildinfo
+
+# ---- Secrets / local ----
+.env
+.env.local
+*.pem
+.DS_Store
+
+# ---- Data / artifacts ----
+*.sqlite
+*.db
+pgdata/
+.coverage
+htmlcov/

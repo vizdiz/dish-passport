@@ -1,0 +1,11 @@
+[project]
+name = "dishport-ingestion"
+version = "0.1.0"
+description = "Dish Passport — Service 1 (Ingestion): the dedup gate."
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]

@@ -1,0 +1,77 @@
+"""Endpoint tests via FastAPI TestClient, wired to the in-memory repo + stub providers."""
+from __future__ import annotations
+
+from tests.fakes import StubEmbedder, StubNormalizer, axis0, flat_flavor
+
+
+def _seed(repo, name="Pho", description="aromatic beef noodle broth"):
+    return repo.seed_dish(
+        name=name, description=description, flavor=flat_flavor(),
+        embedding=axis0(), ingredients=["beef", "rice noodles"], prep_method="simmered",
+    )
+
+
+def test_post_logs_text_mints(repo, make_client):
+    client = make_client(repo, StubEmbedder(), StubNormalizer())
+
+    resp = client.post("/logs", json={"user_id": 1, "text": "green papaya salad"})
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["is_new"] is True
+    assert isinstance(body["log_id"], int)
+    assert len(body["dish"]["flavor"]) == 10
+    assert set(body["dish"]["flavor"]) >= {"umami", "spicy", "fresh"}
+
+
+def test_post_logs_requires_text_xor_dish_id(repo, make_client):
+    client = make_client(repo, StubEmbedder(), StubNormalizer())
+
+    both = client.post("/logs", json={"user_id": 1, "text": "x", "dish_id": 1})
+    neither = client.post("/logs", json={"user_id": 1})
+
+    assert both.status_code == 422
+    assert neither.status_code == 422
+
+
+def test_post_logs_dish_id_fastlane(repo, make_client):
+    dish = _seed(repo)
+    embedder, normalizer = StubEmbedder(), StubNormalizer()
+    client = make_client(repo, embedder, normalizer)
+
+    resp = client.post("/logs", json={"user_id": 2, "dish_id": dish.id})
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["is_new"] is False
+    assert body["dish"]["id"] == dish.id
+    assert embedder.calls == 0 and normalizer.calls == 0   # fast lane touched no provider
+
+
+def test_get_dish_detail_and_404(repo, make_client):
+    dish = _seed(repo)
+    client = make_client(repo, StubEmbedder(), StubNormalizer())
+
+    ok = client.get(f"/dishes/{dish.id}")
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["name"] == "Pho"
+    assert ok.json()["ingredients"] == ["beef", "rice noodles"]
+
+    missing = client.get("/dishes/424242")
+    assert missing.status_code == 404
+
+
+def test_post_impressions_ingest(repo, make_client):
+    client = make_client(repo, StubEmbedder(), StubNormalizer())
+
+    payload = [
+        {"user_id": 1, "dish_id": 10, "shown_at": "2026-05-30T08:00:00Z",
+         "context": "feed", "converted": False},
+        {"user_id": 1, "dish_id": 11, "shown_at": "2026-05-30T08:00:01Z",
+         "context": "recs", "converted": True},
+    ]
+    resp = client.post("/impressions", json=payload)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"ingested": 2}
+    assert len(repo.impressions) == 2
