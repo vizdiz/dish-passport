@@ -23,7 +23,7 @@
 |---|---------|--------|
 | **1** | **Ingestion** — dedup gate, log, impressions ingest | **✅ built** |
 | **2** | **Similarity** — `/dishes/{id}/similar`, pure big-vector | **✅ built** |
-| 3 | Flavor + SVD — refine, fit, project, explain | pending |
+| **3** | **Flavor + SVD** — refine, fit, project, explain | **✅ built** |
 | 4 | CF — ALS batch (confidence-weighted) | pending |
 | 5 | Recommend — ensemble, ramp, filter disliked | pending |
 
@@ -107,6 +107,25 @@ surfaces cross-cuisine kinship and the empirical instrument for `DEDUP_TAU`
 
 `/impressions` is **write-only** here; soft negatives are derived later in
 `rebuild_taste_profiles` (Service 5). This is the frontend↔backend seam — see §6.
+
+### 3.5 Service 3 — Flavor + SVD (the explainability layer)
+
+- **`PATCH /logs/{id}/flavor`** stores a user's 10-dim refinement as `logs.flavor_override`
+  (an implicit signal; not used yet, consumed by later services).
+- **Batch `recompute_svd`** (`app/services/flavor_svd.py`, numpy): mean-center the N×10 flavor
+  matrix, SVD, keep the top 4 components. Persists `flavor_svd_model`
+  (components + singular_values + **mean** + data-derived `factor_labels`) and per-dish
+  projections in `dish_flavor_factors`. Scheduler-triggered (manual: `scripts/run_recompute_svd.py`),
+  **never** a public endpoint, **never** run in a request.
+- **Online projection:** `GET /dishes/{id}` projects the dish into the latest factor space on
+  the fly — `components @ (flavor − mean)` — so dishes minted after the last fit still get
+  factors without a refit. Factor signs are normalized (largest loading positive) for
+  determinism; the model version is a content hash.
+- **Factor labels are data-driven** — derived from each component's strongest ± loadings after
+  fitting (e.g. observed `sour+fresh ↔ rich+sweet`), never hand-named. Factors are
+  explainability **only** — never retrieval.
+
+New tables (`migrations/002_flavor_svd.sql`): `flavor_svd_model`, `dish_flavor_factors` (vector(4)).
 
 ## 4. Decisions made autonomously (review these)
 

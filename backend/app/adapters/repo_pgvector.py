@@ -6,16 +6,26 @@ pool `init` in app/main.py, so list/array vectors encode straight into `vector` 
 """
 from __future__ import annotations
 
+import json
 from typing import Optional, Sequence
 
 import asyncpg
+from pgvector.asyncpg import register_vector
 
-from app.ports import DishRecord, ImpressionRow, Neighbor, NormalizedDish
+from app.ports import DishRecord, ImpressionRow, Neighbor, NormalizedDish, SvdModel
 
 _DISH_COLS = (
     "id, name, canonical_description, ingredients, prep_method, "
     "flavor, embedding_model_version, created_at"
 )
+
+
+async def init_connection(conn: asyncpg.Connection) -> None:
+    """Pool `init`: register pgvector codecs and a jsonb codec (for the SVD model)."""
+    await register_vector(conn)
+    await conn.set_type_codec(
+        "jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog"
+    )
 
 
 def _to_record(row: asyncpg.Record) -> DishRecord:
@@ -125,3 +135,71 @@ class PgVectorRepository:
                 [(r.user_id, r.dish_id, r.shown_at, r.context, r.converted) for r in rows],
             )
         return len(rows)
+
+    # ---- flavor / SVD (Service 3) ----
+    async def set_log_flavor_override(self, log_id: int, flavor: Sequence[float]) -> bool:
+        async with self._pool.acquire() as conn:
+            updated = await conn.fetchval(
+                "UPDATE logs SET flavor_override = $2 WHERE id = $1 RETURNING id",
+                log_id, list(flavor),
+            )
+        return updated is not None
+
+    async def all_dish_flavors(self) -> list[tuple[int, list[float]]]:
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch("SELECT id, flavor FROM dishes ORDER BY id")
+        return [(r["id"], [float(x) for x in r["flavor"]]) for r in rows]
+
+    async def save_svd_model(self, model: SvdModel) -> None:
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO flavor_svd_model "
+                "(version, components, singular_values, mean, factor_labels) "
+                "VALUES ($1, $2, $3, $4, $5) "
+                "ON CONFLICT (version) DO UPDATE SET "
+                "components = EXCLUDED.components, singular_values = EXCLUDED.singular_values, "
+                "mean = EXCLUDED.mean, factor_labels = EXCLUDED.factor_labels, created_at = now()",
+                model.version, model.components, model.singular_values, model.mean,
+                model.factor_labels,
+            )
+
+    async def get_latest_svd_model(self) -> Optional[SvdModel]:
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT version, components, singular_values, mean, factor_labels "
+                "FROM flavor_svd_model ORDER BY created_at DESC LIMIT 1"
+            )
+        if row is None:
+            return None
+        return SvdModel(
+            version=row["version"],
+            components=row["components"],
+            singular_values=row["singular_values"],
+            mean=row["mean"],
+            factor_labels=row["factor_labels"],
+        )
+
+    async def save_dish_factors(
+        self, factors: Sequence[tuple[int, list[float]]], svd_model_version: str
+    ) -> None:
+        if not factors:
+            return
+        async with self._pool.acquire() as conn:
+            await conn.executemany(
+                "INSERT INTO dish_flavor_factors (dish_id, factors, svd_model_version) "
+                "VALUES ($1, $2, $3) "
+                "ON CONFLICT (dish_id) DO UPDATE SET "
+                "factors = EXCLUDED.factors, svd_model_version = EXCLUDED.svd_model_version, "
+                "updated_at = now()",
+                [(dish_id, list(vec), svd_model_version) for dish_id, vec in factors],
+            )
+
+    async def get_dish_factors(self, dish_id: int) -> Optional[tuple[list[float], str]]:
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT factors, svd_model_version FROM dish_flavor_factors WHERE dish_id = $1",
+                dish_id,
+            )
+        if row is None:
+            return None
+        return ([float(x) for x in row["factors"]], row["svd_model_version"])

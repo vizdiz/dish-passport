@@ -46,6 +46,16 @@ class Neighbor:
 
 
 @dataclass(frozen=True)
+class SvdModel:
+    """A fitted flavor SVD: stored so new dishes project into factor space without refit."""
+    version: str
+    components: list[list[float]]   # n_factors x 10, orthonormal rows (loadings)
+    singular_values: list[float]    # n_factors
+    mean: list[float]               # 10, the centering mean
+    factor_labels: list[str]        # n_factors, derived from loadings
+
+
+@dataclass(frozen=True)
 class ImpressionRow:
     user_id: int
     dish_id: int
@@ -87,3 +97,13 @@ class DishRepository(Protocol):
         notes: Optional[str],
     ) -> int: ...
     async def insert_impressions(self, rows: Sequence[ImpressionRow]) -> int: ...
+
+    # ---- flavor / SVD (Service 3) ----
+    async def set_log_flavor_override(self, log_id: int, flavor: Sequence[float]) -> bool: ...
+    async def all_dish_flavors(self) -> list[tuple[int, list[float]]]: ...
+    async def save_svd_model(self, model: SvdModel) -> None: ...
+    async def get_latest_svd_model(self) -> Optional[SvdModel]: ...
+    async def save_dish_factors(
+        self, factors: Sequence[tuple[int, list[float]]], svd_model_version: str
+    ) -> None: ...
+    async def get_dish_factors(self, dish_id: int) -> Optional[tuple[list[float], str]]: ...

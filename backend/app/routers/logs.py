@@ -5,7 +5,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.config import Settings
 from app.deps import get_embedder, get_normalizer, get_repo, get_settings
 from app.ports import DishNormalizer, DishRepository, Embedder
-from app.schemas import DishOut, LogRequest, LogResponse
+from app.schemas import (
+    DishOut,
+    FlavorOverrideRequest,
+    FlavorOverrideResponse,
+    LogRequest,
+    LogResponse,
+    flavor_to_dict,
+)
 from app.services.ingestion import DishNotFound, log_dish
 
 router = APIRouter(tags=["logs"])
@@ -40,3 +47,17 @@ async def create_log(
         is_new=result.is_new,
         log_id=result.log_id,
     )
+
+
+@router.patch("/logs/{log_id}/flavor", response_model=FlavorOverrideResponse)
+async def refine_flavor(
+    log_id: int,
+    body: FlavorOverrideRequest,
+    repo: DishRepository = Depends(get_repo),
+) -> FlavorOverrideResponse:
+    """User refines the 10 flavor dims for a log (implicit signal; Service 3)."""
+    vector = body.as_vector()
+    ok = await repo.set_log_flavor_override(log_id, vector)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"log {log_id} not found")
+    return FlavorOverrideResponse(log_id=log_id, flavor_override=flavor_to_dict(vector))

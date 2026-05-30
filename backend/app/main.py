@@ -25,11 +25,10 @@ async def lifespan(app: FastAPI):
 
     if settings.database_url:
         import asyncpg
-        from pgvector.asyncpg import register_vector
 
-        from app.adapters.repo_pgvector import PgVectorRepository
+        from app.adapters.repo_pgvector import PgVectorRepository, init_connection
 
-        pool = await asyncpg.create_pool(dsn=settings.database_url, init=register_vector)
+        pool = await asyncpg.create_pool(dsn=settings.database_url, init=init_connection)
         repo = PgVectorRepository(pool)
         app.dependency_overrides[deps.get_repo] = lambda: repo
         logger.info("wired PgVectorRepository")

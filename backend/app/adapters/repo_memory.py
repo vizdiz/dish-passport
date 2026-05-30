@@ -6,7 +6,7 @@ import math
 from datetime import datetime, timezone
 from typing import Optional, Sequence
 
-from app.ports import DishRecord, ImpressionRow, Neighbor, NormalizedDish
+from app.ports import DishRecord, ImpressionRow, Neighbor, NormalizedDish, SvdModel
 
 
 def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
@@ -28,6 +28,8 @@ class InMemoryDishRepository:
         self._logs: list[dict] = []
         self._impressions: list[ImpressionRow] = []
         self._user_log_count: dict[int, int] = {}
+        self._svd_model: SvdModel | None = None
+        self._dish_factors: dict[int, tuple[list[float], str]] = {}
         self._next_dish = 1
         self._next_log = 1
 
@@ -97,6 +99,7 @@ class InMemoryDishRepository:
                 "sentiment": sentiment,
                 "rating": rating,
                 "notes": notes,
+                "flavor_override": None,
             }
         )
         self._user_log_count[user_id] = self._user_log_count.get(user_id, 0) + 1
@@ -105,6 +108,32 @@ class InMemoryDishRepository:
     async def insert_impressions(self, rows: Sequence[ImpressionRow]) -> int:
         self._impressions.extend(rows)
         return len(rows)
+
+    # ---- flavor / SVD (Service 3) ----
+    async def set_log_flavor_override(self, log_id: int, flavor: Sequence[float]) -> bool:
+        for log in self._logs:
+            if log["id"] == log_id:
+                log["flavor_override"] = list(flavor)
+                return True
+        return False
+
+    async def all_dish_flavors(self) -> list[tuple[int, list[float]]]:
+        return [(rec.id, list(rec.flavor)) for rec, _ in self._dishes.values()]
+
+    async def save_svd_model(self, model: SvdModel) -> None:
+        self._svd_model = model
+
+    async def get_latest_svd_model(self) -> Optional[SvdModel]:
+        return self._svd_model
+
+    async def save_dish_factors(
+        self, factors: Sequence[tuple[int, list[float]]], svd_model_version: str
+    ) -> None:
+        for dish_id, vec in factors:
+            self._dish_factors[dish_id] = (list(vec), svd_model_version)
+
+    async def get_dish_factors(self, dish_id: int) -> Optional[tuple[list[float], str]]:
+        return self._dish_factors.get(dish_id)
 
     # ---- test / local helpers (not part of the port) ----
     def seed_dish(

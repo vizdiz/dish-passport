@@ -6,10 +6,11 @@ A dish is a *shared, canonical* thing: many users, one dish. Every log points at
 canonical catalog entry, so the user×dish matrix overlaps and collaborative filtering
 (later service) has something to chew on.
 
-> **Build status:** **Service 1 — Ingestion** + **Service 2 — Similarity** (this repo).
-> The dedup gate, ports/adapters, `/logs` · `/impressions` · `GET /dishes/{id}` ·
-> `GET /dishes/{id}/similar`. Flavor SVD (3), ALS/CF (4), and the ensemble (5) are
-> intentionally **not** here yet. See [ARCHITECTURE.md](./ARCHITECTURE.md).
+> **Build status:** **Services 1–3** (this repo) — Ingestion, Similarity, Flavor+SVD.
+> The dedup gate, ports/adapters, `/logs` · `/impressions` · `GET /dishes/{id}` (with the
+> 4-factor projection) · `GET /dishes/{id}/similar` · `PATCH /logs/{id}/flavor`, plus the
+> batch `recompute_svd`. ALS/CF (4) and the ensemble (5) are intentionally **not** here yet.
+> See [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Service 1 — Ingestion (the dedup gate)
 
@@ -43,10 +44,14 @@ cd backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 docker compose -f ../docker-compose.yml up -d            # Postgres + pgvector
-psql "$DP_DATABASE_URL" -f migrations/001_init.sql
 export DP_DATABASE_URL=postgresql://dishport:dishport@localhost:5432/dishport
+psql "$DP_DATABASE_URL" -f migrations/001_init.sql
+psql "$DP_DATABASE_URL" -f migrations/002_flavor_svd.sql
 export DP_OPENAI_API_KEY=...  DP_ANTHROPIC_API_KEY=...
 uvicorn app.main:app --reload                            # http://localhost:8000/docs
+
+# batch (Service 3) — scheduler-triggered in prod; manual entry point for now:
+PYTHONPATH=. python scripts/run_recompute_svd.py         # fit flavor SVD + per-dish factors
 ```
 
 ## Test
@@ -63,8 +68,9 @@ pytest -q          # dedup gate + endpoints, on in-memory fakes (no DB, no keys)
 |--------|------|------|---------|
 | POST | `/logs` | `{user_id, text\|dish_id, sentiment?, rating?, notes?}` | `{dish, is_new, log_id}` |
 | POST | `/impressions` | `[{user_id, dish_id, shown_at, context, converted}]` | `{ingested}` |
-| GET | `/dishes/{id}` | — | dish detail (lets the optimistic client reconcile the canonical id) |
+| GET | `/dishes/{id}` | — | dish detail + 4-factor projection (lets the optimistic client reconcile the canonical id) |
 | GET | `/dishes/{id}/similar?n=` | — | pure big-vector cosine neighbors, self excluded (Service 2) |
+| PATCH | `/logs/{id}/flavor` | `{flavor: {dim: 0..1}}` | user refines the 10 flavor dims (Service 3) |
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for the system design and decisions, and
 [MORNING_REVIEW.md](./MORNING_REVIEW.md) for the overnight build log + QA checklist.

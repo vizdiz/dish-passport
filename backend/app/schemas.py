@@ -29,6 +29,11 @@ class LogRequest(BaseModel):
         return self
 
 
+class FactorScore(BaseModel):
+    label: str                          # data-derived, e.g. "rich+umami ↔ fresh+sour"
+    value: float
+
+
 class DishOut(BaseModel):
     id: int
     name: str
@@ -38,6 +43,9 @@ class DishOut(BaseModel):
     flavor: dict[str, float]            # dim -> score, ordered by FLAVOR_DIMS
     embedding_model_version: str
     created_at: datetime
+    # Service 3: 4-factor projection, present once an SVD model exists (else null).
+    factors: Optional[list[FactorScore]] = None
+    svd_model_version: Optional[str] = None
 
     @classmethod
     def from_record(cls, d: DishRecord) -> "DishOut":
@@ -51,6 +59,27 @@ class DishOut(BaseModel):
             embedding_model_version=d.embedding_model_version,
             created_at=d.created_at,
         )
+
+
+class FlavorOverrideRequest(BaseModel):
+    """User refinement of the 10 flavor dims (stored as logs.flavor_override)."""
+    flavor: dict[str, float]
+
+    @model_validator(mode="after")
+    def _validate_dims(self) -> "FlavorOverrideRequest":
+        if set(self.flavor) != set(FLAVOR_DIMS):
+            raise ValueError(f"flavor must have exactly these keys: {list(FLAVOR_DIMS)}")
+        if any(not (0.0 <= v <= 1.0) for v in self.flavor.values()):
+            raise ValueError("every flavor score must be in [0, 1]")
+        return self
+
+    def as_vector(self) -> list[float]:
+        return [float(self.flavor[dim]) for dim in FLAVOR_DIMS]
+
+
+class FlavorOverrideResponse(BaseModel):
+    log_id: int
+    flavor_override: dict[str, float]
 
 
 class LogResponse(BaseModel):

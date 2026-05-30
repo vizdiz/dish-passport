@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.deps import get_repo
 from app.ports import DishRepository
-from app.schemas import DishOut, SimilarNeighbor, SimilarResponse
+from app.schemas import DishOut, FactorScore, SimilarNeighbor, SimilarResponse
 from app.services.errors import DishNotFound
+from app.services.flavor_svd import project
 from app.services.similarity import similar_dishes
 
 router = APIRouter(tags=["dishes"])
@@ -19,7 +20,18 @@ async def get_dish(
     dish = await repo.get_dish(dish_id)
     if dish is None:
         raise HTTPException(status_code=404, detail=f"dish {dish_id} not found")
-    return DishOut.from_record(dish)
+    out = DishOut.from_record(dish)
+
+    # Service 3: project into the latest flavor-factor space (no refit). Null until one exists.
+    model = await repo.get_latest_svd_model()
+    if model is not None:
+        values = project(dish.flavor, model)
+        out.factors = [
+            FactorScore(label=label, value=round(v, 4))
+            for label, v in zip(model.factor_labels, values)
+        ]
+        out.svd_model_version = model.version
+    return out
 
 
 @router.get("/dishes/{dish_id}/similar", response_model=SimilarResponse)
