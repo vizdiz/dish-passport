@@ -44,6 +44,19 @@ class InMemoryDishRepository:
                 best = Neighbor(dish=rec, cosine=cos)
         return best
 
+    async def similar(self, dish_id: int, n: int) -> list[Neighbor]:
+        target = self._dishes.get(dish_id)
+        if target is None:
+            return []
+        _, target_emb = target
+        scored = [
+            Neighbor(dish=rec, cosine=_cosine(target_emb, emb))
+            for did, (rec, emb) in self._dishes.items()
+            if did != dish_id
+        ]
+        scored.sort(key=lambda nb: nb.cosine, reverse=True)
+        return scored[:n]
+
     async def insert_dish(
         self,
         normalized: NormalizedDish,

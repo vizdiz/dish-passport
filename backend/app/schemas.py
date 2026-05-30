@@ -59,6 +59,17 @@ class LogResponse(BaseModel):
     log_id: int
 
 
+class SimilarNeighbor(BaseModel):
+    dish: DishOut
+    cosine: float
+
+
+class SimilarResponse(BaseModel):
+    dish_id: int
+    n: int
+    neighbors: list[SimilarNeighbor]
+
+
 class ImpressionIn(BaseModel):
     user_id: int
     dish_id: int

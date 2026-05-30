@@ -6,9 +6,10 @@ A dish is a *shared, canonical* thing: many users, one dish. Every log points at
 canonical catalog entry, so the user×dish matrix overlaps and collaborative filtering
 (later service) has something to chew on.
 
-> **Build status:** **Service 1 — Ingestion** (this repo). The dedup gate, ports/adapters,
-> `/logs` · `/impressions` · `GET /dishes/{id}`. Similarity (2), flavor SVD (3), ALS/CF (4),
-> and the ensemble (5) are intentionally **not** here yet. See [ARCHITECTURE.md](./ARCHITECTURE.md).
+> **Build status:** **Service 1 — Ingestion** + **Service 2 — Similarity** (this repo).
+> The dedup gate, ports/adapters, `/logs` · `/impressions` · `GET /dishes/{id}` ·
+> `GET /dishes/{id}/similar`. Flavor SVD (3), ALS/CF (4), and the ensemble (5) are
+> intentionally **not** here yet. See [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Service 1 — Ingestion (the dedup gate)
 
@@ -63,6 +64,7 @@ pytest -q          # dedup gate + endpoints, on in-memory fakes (no DB, no keys)
 | POST | `/logs` | `{user_id, text\|dish_id, sentiment?, rating?, notes?}` | `{dish, is_new, log_id}` |
 | POST | `/impressions` | `[{user_id, dish_id, shown_at, context, converted}]` | `{ingested}` |
 | GET | `/dishes/{id}` | — | dish detail (lets the optimistic client reconcile the canonical id) |
+| GET | `/dishes/{id}/similar?n=` | — | pure big-vector cosine neighbors, self excluded (Service 2) |
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for the system design and decisions, and
 [MORNING_REVIEW.md](./MORNING_REVIEW.md) for the overnight build log + QA checklist.

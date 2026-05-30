@@ -21,8 +21,8 @@
 
 | # | Service | Status |
 |---|---------|--------|
-| **1** | **Ingestion** — dedup gate, log, impressions ingest | **✅ built tonight** |
-| 2 | Similarity — `/dishes/{id}/similar`, pure big-vector | pending |
+| **1** | **Ingestion** — dedup gate, log, impressions ingest | **✅ built** |
+| **2** | **Similarity** — `/dishes/{id}/similar`, pure big-vector | **✅ built** |
 | 3 | Flavor + SVD — refine, fit, project, explain | pending |
 | 4 | CF — ALS batch (confidence-weighted) | pending |
 | 5 | Recommend — ensemble, ramp, filter disliked | pending |
@@ -97,6 +97,13 @@ impressions(id, user_id, dish_id, shown_at, context 'feed'|'recs'|'similar', con
 | POST | `/logs` | `{user_id, text\|dish_id, sentiment?, rating?, notes?}` | `{dish, is_new, log_id}` |
 | POST | `/impressions` | `[{user_id, dish_id, shown_at, context, converted}]` | `{ingested}` |
 | GET | `/dishes/{id}` | — | dish detail |
+| GET | `/dishes/{id}/similar?n=` | `n` (1–50, default 10) | ranked big-vector neighbors, self excluded (Service 2) |
+
+**Service 2 (Similarity)** is `app/services/similarity.py` + `DishRepository.similar`: load the
+dish's embedding, return the top-n cosine neighbors (`ORDER BY embedding <=> q.embedding`,
+`WHERE id <> target`), 404 if the dish is missing. No CF, no flavor — this is the layer that
+surfaces cross-cuisine kinship and the empirical instrument for `DEDUP_TAU`
+(`scripts/calibrate_tau.py` prints the catalog's pairwise cosine distribution against τ).
 
 `/impressions` is **write-only** here; soft negatives are derived later in
 `rebuild_taste_profiles` (Service 5). This is the frontend↔backend seam — see §6.

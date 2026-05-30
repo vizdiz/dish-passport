@@ -53,6 +53,20 @@ class PgVectorRepository:
             return None
         return Neighbor(dish=_to_record(row), cosine=float(row["cosine"]))
 
+    async def similar(self, dish_id: int, n: int) -> list[Neighbor]:
+        """Top-n cosine neighbors of a dish, self excluded. Pure big-vector (Service 2)."""
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                f"SELECT {_DISH_COLS}, 1 - (dishes.embedding <=> q.embedding) AS cosine "
+                f"FROM dishes "
+                f"CROSS JOIN (SELECT embedding FROM dishes WHERE id = $1) AS q "
+                f"WHERE dishes.id <> $1 "
+                f"ORDER BY dishes.embedding <=> q.embedding "
+                f"LIMIT $2",
+                dish_id, n,
+            )
+        return [Neighbor(dish=_to_record(row), cosine=float(row["cosine"])) for row in rows]
+
     async def insert_dish(
         self,
         normalized: NormalizedDish,

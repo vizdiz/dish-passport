@@ -74,6 +74,20 @@ async def main() -> None:
           f"(0.85 < 0.90 tau => would MINT)")
     assert abs(kindred.cosine - 0.85) < 1e-3
 
+    # Service 2: a third dish, then similar(A) ranked by cosine, self excluded.
+    c = await repo.insert_dish(
+        NormalizedDish(name="Carnitas", description="slow-braised then crisped pork",
+                       flavor=[0.6, 0.1, 0.1, 0.2, 0.1, 0.8, 0.1, 0.3, 0.0, 0.1]),
+        vec_cos(0.50),
+        "smoke-emb",
+    )
+    sim = await repo.similar(a.id, n=10)
+    print(f"similar(A) -> {[(nb.dish.name, round(nb.cosine, 2)) for nb in sim]}  "
+          f"(self excluded, ranked desc)")
+    assert [nb.dish.id for nb in sim] == [c.id, b.id]       # Carnitas 0.50 > Miso 0.20
+    assert a.id not in [nb.dish.id for nb in sim]
+    assert [nb.dish.id for nb in await repo.similar(a.id, n=1)] == [c.id]
+
     got = await repo.get_dish(a.id)
     print(f"get_dish({a.id}) -> {got.name} ingredients={got.ingredients} "
           f"flavor[0:3]={[round(x,2) for x in got.flavor[:3]]}")

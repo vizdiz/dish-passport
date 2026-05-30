@@ -14,16 +14,11 @@ import logging
 from dataclasses import dataclass
 
 from app.ports import DishNormalizer, DishRecord, DishRepository, Embedder
+from app.services.errors import DishNotFound  # re-exported for callers/tests
 
 logger = logging.getLogger("dishport.ingestion")
 
-
-class DishNotFound(Exception):
-    """Raised when a fast-lane dish_id does not exist."""
-
-    def __init__(self, dish_id: int):
-        super().__init__(f"dish {dish_id} not found")
-        self.dish_id = dish_id
+__all__ = ["DishNotFound", "LogResult", "log_dish"]
 
 
 @dataclass(frozen=True)
