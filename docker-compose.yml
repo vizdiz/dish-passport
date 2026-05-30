@@ -11,7 +11,7 @@ services:
       POSTGRES_PASSWORD: dishport
       POSTGRES_DB: dishport
     ports:
-      - "5432:5432"
+      - "${DP_DB_PORT:-5432}:5432"   # override DP_DB_PORT if 5432 is taken locally
     volumes:
       - ./pgdata:/var/lib/postgresql/data
     healthcheck:

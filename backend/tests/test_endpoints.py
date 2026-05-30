@@ -1,6 +1,11 @@
 """Endpoint tests via FastAPI TestClient, wired to the in-memory repo + stub providers."""
 from __future__ import annotations
 
+from fastapi.testclient import TestClient
+
+from app import deps
+from app.config import Settings
+from app.main import app
 from tests.fakes import StubEmbedder, StubNormalizer, axis0, flat_flavor
 
 
@@ -75,3 +80,27 @@ def test_post_impressions_ingest(repo, make_client):
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"ingested": 2}
     assert len(repo.impressions) == 2
+
+
+def test_fastlane_works_with_only_repo_wired(repo):
+    """Fast lane (and read endpoints) must work with no provider configured — proving the
+    'no LLM, no embed' promise holds at the DI layer. The text path then fails clearly."""
+    dish = _seed(repo)
+    app.dependency_overrides[deps.get_repo] = lambda: repo
+    app.dependency_overrides[deps.get_settings] = lambda: Settings(
+        dedup_tau=0.90, database_url=None, openai_api_key=None, anthropic_api_key=None
+    )
+    # Deliberately do NOT override get_embedder / get_normalizer -> lazy unconfigured providers.
+    try:
+        client = TestClient(app, raise_server_exceptions=False)
+
+        fastlane = client.post("/logs", json={"user_id": 1, "dish_id": dish.id})
+        assert fastlane.status_code == 200, fastlane.text
+        assert fastlane.json()["is_new"] is False
+
+        assert client.get(f"/dishes/{dish.id}").status_code == 200
+
+        text_path = client.post("/logs", json={"user_id": 1, "text": "needs an embedder"})
+        assert text_path.status_code == 500   # raised only when it actually tries to embed
+    finally:
+        app.dependency_overrides.clear()
