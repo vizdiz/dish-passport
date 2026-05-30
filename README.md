@@ -6,10 +6,11 @@ A dish is a *shared, canonical* thing: many users, one dish. Every log points at
 canonical catalog entry, so the user×dish matrix overlaps and collaborative filtering
 (later service) has something to chew on.
 
-> **Build status:** **Services 1–3** (this repo) — Ingestion, Similarity, Flavor+SVD.
+> **Build status:** **Services 1–4** (this repo) — Ingestion, Similarity, Flavor+SVD, CF/ALS.
 > The dedup gate, ports/adapters, `/logs` · `/impressions` · `GET /dishes/{id}` (with the
 > 4-factor projection) · `GET /dishes/{id}/similar` · `PATCH /logs/{id}/flavor`, plus the
-> batch `recompute_svd`. ALS/CF (4) and the ensemble (5) are intentionally **not** here yet.
+> batch jobs `recompute_svd` and `retrain_als` (confidence-weighted implicit ALS). The
+> recommendation ensemble (5) — which *reads* the CF factors — is the remaining backend piece.
 > See [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Service 1 — Ingestion (the dedup gate)
@@ -50,8 +51,10 @@ psql "$DP_DATABASE_URL" -f migrations/002_flavor_svd.sql
 export DP_OPENAI_API_KEY=...  DP_ANTHROPIC_API_KEY=...
 uvicorn app.main:app --reload                            # http://localhost:8000/docs
 
-# batch (Service 3) — scheduler-triggered in prod; manual entry point for now:
+# batch jobs — scheduler-triggered in prod; manual entry points for now:
+psql "$DP_DATABASE_URL" -f migrations/003_cf.sql
 PYTHONPATH=. python scripts/run_recompute_svd.py         # fit flavor SVD + per-dish factors
+PYTHONPATH=. python scripts/run_retrain_als.py           # confidence-weighted ALS factors
 ```
 
 ## Test

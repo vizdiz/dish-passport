@@ -24,7 +24,7 @@
 | **1** | **Ingestion** — dedup gate, log, impressions ingest | **✅ built** |
 | **2** | **Similarity** — `/dishes/{id}/similar`, pure big-vector | **✅ built** |
 | **3** | **Flavor + SVD** — refine, fit, project, explain | **✅ built** |
-| 4 | CF — ALS batch (confidence-weighted) | pending |
+| **4** | **CF** — ALS batch (confidence-weighted) | **✅ built** |
 | 5 | Recommend — ensemble, ramp, filter disliked | pending |
 
 The rest of this document describes Service 1 in detail; later sections sketch the system
@@ -126,6 +126,23 @@ surfaces cross-cuisine kinship and the empirical instrument for `DEDUP_TAU`
   explainability **only** — never retrieval.
 
 New tables (`migrations/002_flavor_svd.sql`): `flavor_svd_model`, `dish_flavor_factors` (vector(4)).
+
+### 3.6 Service 4 — CF / ALS (batch)
+
+- **Batch `retrain_als`** (`app/services/cf.py`, numpy): confidence-weighted implicit ALS
+  (Hu/Koren/Volinsky). Per user×dish, `c = 1 + α·w`, preference `p ∈ {0,1}`:
+  liked → p=1 strong, neutral → p=1 weak, **disliked → p=0 strong (known-zero ≠ unseen)**,
+  unseen → p=0, c=1 (kept implicit via the closed-form `YᵀY + Yₒᵀ(Cₒ−I)Yₒ` trick).
+  Multiple logs of one dish aggregate (positive vs negative weight; ties go positive).
+  Factors clamp to `k ≤ min(#users, #items)`; version is a content hash.
+- Persists `cf_user_factors` / `cf_item_factors` as plain `double precision[]` (read as dot
+  products at inference — never indexed for nearest-neighbor). Scheduler-triggered
+  (`scripts/run_retrain_als.py`), never a request, never an endpoint.
+- **Inference (Service 5):** the CF score is `xᵤ·yᵢ` over the precomputed factors — a read.
+  The 'disliked ≠ unseen' distinction is verified directly: a disliked dish scores *below*
+  the same dish merely unseen by a similar user.
+
+New tables (`migrations/003_cf.sql`): `cf_user_factors`, `cf_item_factors`.
 
 ## 4. Decisions made autonomously (review these)
 

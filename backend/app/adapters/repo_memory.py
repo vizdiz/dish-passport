@@ -30,6 +30,8 @@ class InMemoryDishRepository:
         self._user_log_count: dict[int, int] = {}
         self._svd_model: SvdModel | None = None
         self._dish_factors: dict[int, tuple[list[float], str]] = {}
+        self._cf_user: dict[int, tuple[list[float], str]] = {}
+        self._cf_item: dict[int, tuple[list[float], str]] = {}
         self._next_dish = 1
         self._next_log = 1
 
@@ -134,6 +136,27 @@ class InMemoryDishRepository:
 
     async def get_dish_factors(self, dish_id: int) -> Optional[tuple[list[float], str]]:
         return self._dish_factors.get(dish_id)
+
+    # ---- collaborative filtering (Service 4) ----
+    async def all_logs(self) -> list[tuple[int, int, str]]:
+        return [(log["user_id"], log["dish_id"], log["sentiment"]) for log in self._logs]
+
+    async def save_cf_factors(
+        self,
+        user_factors: Sequence[tuple[int, list[float]]],
+        item_factors: Sequence[tuple[int, list[float]]],
+        model_version: str,
+    ) -> None:
+        for user_id, vec in user_factors:
+            self._cf_user[user_id] = (list(vec), model_version)
+        for dish_id, vec in item_factors:
+            self._cf_item[dish_id] = (list(vec), model_version)
+
+    async def get_cf_user_factors(self, user_id: int) -> Optional[tuple[list[float], str]]:
+        return self._cf_user.get(user_id)
+
+    async def get_cf_item_factors(self, dish_id: int) -> Optional[tuple[list[float], str]]:
+        return self._cf_item.get(dish_id)
 
     # ---- test / local helpers (not part of the port) ----
     def seed_dish(

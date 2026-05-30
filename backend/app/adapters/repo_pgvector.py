@@ -203,3 +203,52 @@ class PgVectorRepository:
         if row is None:
             return None
         return ([float(x) for x in row["factors"]], row["svd_model_version"])
+
+    # ---- collaborative filtering (Service 4) ----
+    async def all_logs(self) -> list[tuple[int, int, str]]:
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch("SELECT user_id, dish_id, sentiment FROM logs")
+        return [(r["user_id"], r["dish_id"], r["sentiment"]) for r in rows]
+
+    async def save_cf_factors(
+        self,
+        user_factors: Sequence[tuple[int, list[float]]],
+        item_factors: Sequence[tuple[int, list[float]]],
+        model_version: str,
+    ) -> None:
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                if user_factors:
+                    await conn.executemany(
+                        "INSERT INTO cf_user_factors (user_id, factors, model_version) "
+                        "VALUES ($1, $2, $3) ON CONFLICT (user_id) DO UPDATE SET "
+                        "factors = EXCLUDED.factors, model_version = EXCLUDED.model_version, "
+                        "computed_at = now()",
+                        [(uid, [float(x) for x in vec], model_version) for uid, vec in user_factors],
+                    )
+                if item_factors:
+                    await conn.executemany(
+                        "INSERT INTO cf_item_factors (dish_id, factors, model_version) "
+                        "VALUES ($1, $2, $3) ON CONFLICT (dish_id) DO UPDATE SET "
+                        "factors = EXCLUDED.factors, model_version = EXCLUDED.model_version, "
+                        "computed_at = now()",
+                        [(did, [float(x) for x in vec], model_version) for did, vec in item_factors],
+                    )
+
+    async def get_cf_user_factors(self, user_id: int) -> Optional[tuple[list[float], str]]:
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT factors, model_version FROM cf_user_factors WHERE user_id = $1", user_id
+            )
+        if row is None:
+            return None
+        return ([float(x) for x in row["factors"]], row["model_version"])
+
+    async def get_cf_item_factors(self, dish_id: int) -> Optional[tuple[list[float], str]]:
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT factors, model_version FROM cf_item_factors WHERE dish_id = $1", dish_id
+            )
+        if row is None:
+            return None
+        return ([float(x) for x in row["factors"]], row["model_version"])
