@@ -104,9 +104,9 @@ recommend(user999) cold=True  -> D0..D4 (popularity)
 
 ## What's NOT done (next candidates)
 
-1. **Celery Beat wiring.** The three batch jobs run today via `scripts/run_*.py`; they need a
-   `celery_app` + beat schedule + Redis to be truly scheduler-triggered (spec §2). Redis is not
-   in `docker-compose.yml` yet.
+1. ~~**Celery Beat wiring.**~~ ✅ **Done** — `app/celery_app.py` + `app/tasks.py`, Redis in
+   docker-compose, beat schedule (taste hourly · ALS nightly · SVD weekly). Verified end-to-end
+   (task enqueued through Redis → worker → DB → result). Manual `scripts/run_*.py` still work.
 2. **Real provider keys.** The mint path and real embeddings need `DP_OPENAI_API_KEY` /
    `DP_ANTHROPIC_API_KEY`. Until then the cross-cuisine similarity *quality* proof (ceviche≈larb)
    can't be seen — only the gate mechanics are exercised (synthetic vectors).

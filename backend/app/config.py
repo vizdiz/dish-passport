@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     # Infra (asyncpg DSN — plain postgresql://, not a SQLAlchemy +driver URL).
     database_url: str | None = None
 
+    # Celery (batch scheduler). Broker + result backend default to local Redis.
+    celery_broker_url: str = "redis://localhost:6379/0"
+    celery_result_backend: str = "redis://localhost:6379/1"
+
     # Providers. Absent in tests (in-memory fakes); required to actually run the gate.
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None

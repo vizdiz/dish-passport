@@ -6,10 +6,11 @@ A dish is a *shared, canonical* thing: many users, one dish. Every log points at
 canonical catalog entry, so the user×dish matrix overlaps and collaborative filtering
 (later service) has something to chew on.
 
-> **Build status:** **Backend complete — Services 1–5** (this repo): Ingestion, Similarity,
-> Flavor+SVD, CF/ALS, Recommendation. Full API below, three batch jobs (`recompute_svd`,
-> `retrain_als`, `rebuild_taste_profiles`), 45 tests green + every adapter verified on real
-> Postgres+pgvector. Remaining: Celery Beat wiring and the React Native client.
+> **Build status:** **Backend complete — Services 1–5 + Celery Beat** (this repo): Ingestion,
+> Similarity, Flavor+SVD, CF/ALS, Recommendation, and the batch scheduler. Full API below,
+> three batch jobs scheduled via Celery Beat + Redis (`recompute_svd`, `retrain_als`,
+> `rebuild_taste_profiles`), 48 tests green + every adapter and the broker round-trip verified
+> on real Postgres+pgvector+Redis. Remaining: the React Native client.
 > See [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Service 1 — Ingestion (the dedup gate)
@@ -50,9 +51,15 @@ psql "$DP_DATABASE_URL" -f migrations/002_flavor_svd.sql
 export DP_OPENAI_API_KEY=...  DP_ANTHROPIC_API_KEY=...
 uvicorn app.main:app --reload                            # http://localhost:8000/docs
 
-# batch jobs — scheduler-triggered in prod; manual entry points for now:
 psql "$DP_DATABASE_URL" -f migrations/003_cf.sql
 psql "$DP_DATABASE_URL" -f migrations/004_taste_profiles.sql
+
+# batch scheduler — Celery Beat + Redis (Redis is in docker compose):
+celery -A app.celery_app.celery worker -l info           # runs the three batch tasks
+celery -A app.celery_app.celery beat   -l info           # triggers them on schedule
+#   taste profiles hourly · ALS nightly 03:00 · SVD weekly Sun 04:00 (tunable in celery_app.py)
+
+# ...or trigger a batch job once, by hand:
 PYTHONPATH=. python scripts/run_recompute_svd.py         # fit flavor SVD + per-dish factors
 PYTHONPATH=. python scripts/run_retrain_als.py           # confidence-weighted ALS factors
 PYTHONPATH=. python scripts/run_rebuild_taste_profiles.py  # centroids + factor prefs

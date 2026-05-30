@@ -171,13 +171,27 @@ factors over liked dishes. Disliked dishes are filtered from recs **and** fed as
 CF/SVD factors and profiles are **read** on the request path; nothing is trained online.
 New table (`migrations/004_taste_profiles.sql`): `user_taste_profiles`.
 
+### 3.8 Batch scheduler — Celery Beat + Redis
+
+`app/celery_app.py` configures the Celery app (Redis broker + result backend) and the Beat
+schedule; `app/tasks.py` holds the three tasks (`dishport.recompute_svd`, `dishport.retrain_als`,
+`dishport.rebuild_taste_profiles`). Each task opens a **short-lived asyncpg pool** and runs the
+async batch service against a `PgVectorRepository` under `asyncio.run` — correct for Celery's
+prefork worker (a fresh pool per run stays bound to that run's event loop). Tasks return small
+JSON summaries. This is the production home for the batch services — the `scripts/run_*.py`
+remain as manual one-shot triggers.
+
+**Cadence (tunable in `celery_app.py`):** taste profiles hourly · ALS nightly 03:00 UTC ·
+SVD weekly Sun 04:00 UTC. Verified end-to-end: a task enqueued through Redis is executed by a
+worker against the live DB and its result returned via the backend.
+
 ## 8a. Backend status & what's left
 
-All five services are built, unit-tested (45 tests on in-memory fakes), and verified
-end-to-end against real Postgres+pgvector via the `scripts/smoke_*.py` checks. Not yet done:
-**Celery Beat** wiring for the three batch jobs (they run today via `scripts/run_*.py`),
-real provider keys (OpenAI/Anthropic — the gate's mint path and embeddings need them), and the
-**React Native client**. Auth is still the stubbed `user_id`.
+All five services **plus the Celery Beat scheduler** are built, unit-tested (48 tests on
+in-memory fakes), and verified against real Postgres+pgvector+Redis via the `scripts/smoke_*.py`
+checks (including a broker round-trip). Not yet done: real provider keys (OpenAI/Anthropic —
+the gate's mint path and embeddings need them), and the **React Native client**. Auth is still
+the stubbed `user_id`.
 
 ## 4. Decisions made autonomously (review these)
 

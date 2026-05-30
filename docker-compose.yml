@@ -1,7 +1,7 @@
-# Local Postgres + pgvector for Dish Passport.
+# Local infra for Dish Passport: Postgres+pgvector and Redis (Celery broker/backend).
 #   docker compose up -d
-#   psql "$DP_DATABASE_URL" -f backend/migrations/001_init.sql
-# (Redis/Celery arrive with the batch services — not part of Service 1.)
+#   for m in 001_init 002_flavor_svd 003_cf 004_taste_profiles; do \
+#     psql "$DP_DATABASE_URL" -f backend/migrations/$m.sql; done
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -16,6 +16,17 @@ services:
       - ./pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dishport -d dishport"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: dishport-redis
+    ports:
+      - "${DP_REDIS_PORT:-6379}:6379"   # override DP_REDIS_PORT if 6379 is taken locally
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 3s
       timeout: 3s
       retries: 20
