@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Dish Passport",
+    "slug": "dish-passport",
+    "scheme": "dishport",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "backgroundColor": "#FBF7F0",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Dish Passport uses your photos so you can attach a picture of a dish you logged."
+        }
+      ],
+      "expo-font"
+    ]
+  }
+}
