@@ -86,6 +86,14 @@ class DishNormalizer(Protocol):
 
 
 @runtime_checkable
+class Storage(Protocol):
+    """Object storage for dish photos (S3 / MinIO). Presigned PUT + public URL."""
+
+    def presign_put(self, key: str, content_type: str, expires: int = 3600) -> str: ...
+    def public_url(self, key: str) -> str: ...
+
+
+@runtime_checkable
 class DishRepository(Protocol):
     async def get_dish(self, dish_id: int) -> Optional[DishRecord]: ...
     async def nearest(self, embedding: Sequence[float]) -> Optional[Neighbor]: ...
@@ -104,6 +112,7 @@ class DishRepository(Protocol):
         sentiment: str,
         rating: Optional[int],
         notes: Optional[str],
+        photo_url: Optional[str] = None,
     ) -> int: ...
     async def insert_impressions(self, rows: Sequence[ImpressionRow]) -> int: ...
 

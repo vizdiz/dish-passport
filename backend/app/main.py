@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app import deps
-from app.routers import dishes, impressions, logs, recommendations, users
+from app.routers import dishes, impressions, logs, recommendations, uploads, users
 
 logger = logging.getLogger("dishport")
 
@@ -62,6 +62,7 @@ app.include_router(dishes.router)
 app.include_router(impressions.router)
 app.include_router(recommendations.router)
 app.include_router(users.router)
+app.include_router(uploads.router)
 
 
 @app.get("/health", tags=["meta"])

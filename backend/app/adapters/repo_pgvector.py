@@ -119,6 +119,7 @@ class PgVectorRepository:
         sentiment: str,
         rating: Optional[int],
         notes: Optional[str],
+        photo_url: Optional[str] = None,
     ) -> int:
         async with self._pool.acquire() as conn:
             async with conn.transaction():
@@ -127,9 +128,9 @@ class PgVectorRepository:
                     user_id,
                 )
                 log_id = await conn.fetchval(
-                    "INSERT INTO logs (user_id, dish_id, sentiment, rating, notes) "
-                    "VALUES ($1, $2, $3, $4, $5) RETURNING id",
-                    user_id, dish_id, sentiment, rating, notes,
+                    "INSERT INTO logs (user_id, dish_id, sentiment, rating, notes, photo_url) "
+                    "VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+                    user_id, dish_id, sentiment, rating, notes, photo_url,
                 )
                 await conn.execute(
                     "UPDATE users SET log_count = log_count + 1 WHERE id = $1", user_id

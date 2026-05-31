@@ -30,3 +30,19 @@ services:
       interval: 3s
       timeout: 3s
       retries: 20
+
+  # S3-compatible object storage for dish photos (local stand-in for AWS S3).
+  # Console at http://localhost:9001 (minioadmin / minioadmin). Create the bucket with
+  # scripts/smoke_storage.py (idempotent) or the MinIO console.
+  minio:
+    image: minio/minio:latest
+    container_name: dishport-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "${DP_MINIO_PORT:-9000}:9000"
+      - "${DP_MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - ./miniodata:/data

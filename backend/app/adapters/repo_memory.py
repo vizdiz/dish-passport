@@ -98,6 +98,7 @@ class InMemoryDishRepository:
         sentiment: str,
         rating: Optional[int],
         notes: Optional[str],
+        photo_url: Optional[str] = None,
     ) -> int:
         log_id = self._next_log
         self._next_log += 1
@@ -109,6 +110,7 @@ class InMemoryDishRepository:
                 "sentiment": sentiment,
                 "rating": rating,
                 "notes": notes,
+                "photo_url": photo_url,
                 "flavor_override": None,
             }
         )

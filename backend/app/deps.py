@@ -14,12 +14,19 @@ from __future__ import annotations
 from functools import lru_cache
 
 from app.config import Settings
-from app.ports import DishNormalizer, DishRepository, Embedder, NormalizedDish
+from app.ports import DishNormalizer, DishRepository, Embedder, NormalizedDish, Storage
 
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+@lru_cache
+def get_storage() -> Storage:
+    from app.services.storage import S3Storage
+
+    return S3Storage(get_settings())
 
 
 def get_repo() -> DishRepository:  # pragma: no cover - overridden at startup / in tests

@@ -8,3 +8,4 @@ pgvector>=0.3.6
 openai>=1.40
 anthropic>=0.40
 celery[redis]>=5.3
+boto3>=1.34

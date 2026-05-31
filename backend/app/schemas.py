@@ -19,6 +19,7 @@ class LogRequest(BaseModel):
     sentiment: Sentiment = "liked"
     rating: Optional[int] = Field(default=None, ge=1, le=5)
     notes: Optional[str] = None
+    photo_url: Optional[str] = None
 
     @model_validator(mode="after")
     def _exactly_one_source(self) -> "LogRequest":
@@ -123,6 +124,16 @@ class RecommendationsResponse(BaseModel):
     n: int
     cold_start: bool
     recommendations: list[RecommendationOut]
+
+
+class PresignRequest(BaseModel):
+    content_type: Literal["image/jpeg", "image/png", "image/webp"]
+
+
+class PresignResponse(BaseModel):
+    upload_url: str
+    public_url: str
+    key: str
 
 
 class TasteProfileOut(BaseModel):

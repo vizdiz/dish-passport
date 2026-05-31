@@ -37,6 +37,7 @@ async def create_log(
             sentiment=body.sentiment,
             rating=body.rating,
             notes=body.notes,
+            photo_url=body.photo_url,
             tau=settings.dedup_tau,
         )
     except DishNotFound as exc:

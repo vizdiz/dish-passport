@@ -39,6 +39,7 @@ async def log_dish(
     sentiment: str = "liked",
     rating: int | None = None,
     notes: str | None = None,
+    photo_url: str | None = None,
     tau: float,
 ) -> LogResult:
     """Run the gate and write a log. Returns the canonical dish, is_new, and log id."""
@@ -50,7 +51,7 @@ async def log_dish(
         dish = await repo.get_dish(dish_id)
         if dish is None:
             raise DishNotFound(dish_id)
-        log_id = await _write_log(repo, user_id, dish.id, sentiment, rating, notes)
+        log_id = await _write_log(repo, user_id, dish.id, sentiment, rating, notes, photo_url)
         logger.info(
             "dedup decision=fastlane dish_id=%s user_id=%s log_id=%s",
             dish.id, user_id, log_id,
@@ -79,7 +80,7 @@ async def log_dish(
             dish.id, dish.name, cosine_str, tau, text,
         )
 
-    log_id = await _write_log(repo, user_id, dish.id, sentiment, rating, notes)
+    log_id = await _write_log(repo, user_id, dish.id, sentiment, rating, notes, photo_url)
     return LogResult(dish=dish, is_new=is_new, log_id=log_id)
 
 
@@ -90,7 +91,9 @@ async def _write_log(
     sentiment: str,
     rating: int | None,
     notes: str | None,
+    photo_url: str | None,
 ) -> int:
     return await repo.insert_log(
         user_id=user_id, dish_id=dish_id, sentiment=sentiment, rating=rating, notes=notes,
+        photo_url=photo_url,
     )

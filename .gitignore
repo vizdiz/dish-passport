@@ -29,5 +29,6 @@ web-build/
 *.sqlite
 *.db
 pgdata/
+miniodata/
 .coverage
 htmlcov/
