@@ -30,6 +30,7 @@ web-build/
 *.db
 pgdata/
 azuritedata/
+miniodata/
 .coverage
 htmlcov/
 
