@@ -22,7 +22,8 @@
           "photosPermission": "Dish Passport uses your photos so you can attach a picture of a dish you logged."
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-asset"
     ]
   }
 }
