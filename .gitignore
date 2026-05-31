@@ -29,6 +29,10 @@ web-build/
 *.sqlite
 *.db
 pgdata/
-miniodata/
+azuritedata/
 .coverage
 htmlcov/
+
+# ---- Agent-authored working docs (local only; not in the public repo) ----
+/ARCHITECTURE.md
+/MORNING_REVIEW.md

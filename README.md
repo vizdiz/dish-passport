@@ -1,21 +1,30 @@
 # Dish Passport
 
-Log a dish. Get a dish recommendation. **Dishes only — no restaurants.**
+**A food app that learns your palate.** Log what you ate in plain words — Dish Passport
+recognizes the *canonical* dish, learns your taste over time, and recommends new dishes, each
+with a plain-English reason why. Dishes only, not restaurants.
 
-A dish is a *shared, canonical* thing: many users, one dish. Every log points at a
-canonical catalog entry, so the user×dish matrix overlaps and collaborative filtering
-(later service) has something to chew on.
+📱 React Native (Expo) · ⚙️ FastAPI · 🐘 Postgres + pgvector · ☁️ Azure · 🤖 OpenAI
 
-> **Build status:** **Backend complete — Services 1–5 + Celery Beat** (this repo): Ingestion,
-> Similarity, Flavor+SVD, CF/ALS, Recommendation, and the batch scheduler. Full API below,
-> three batch jobs scheduled via Celery Beat + Redis (`recompute_svd`, `retrain_als`,
-> `rebuild_taste_profiles`), 48 tests green + every adapter and the broker round-trip verified
-> on real Postgres+pgvector+Redis. Remaining: the React Native client.
-> See [ARCHITECTURE.md](./ARCHITECTURE.md).
+## What makes it tick
 
-## Service 1 — Ingestion (the dedup gate)
+- **Shared, canonical dishes.** Your "chicken tikka" and someone else's "murgh tikka" resolve
+  to one catalog entry — so the app learns across everyone, not just you.
+- **Find with one lens, explain with another.** An opaque embedding finds *similar* dishes; a
+  separate, readable flavor fingerprint (umami…fresh) explains *why* something is recommended.
+- **Learns what you dislike, too.** A like / meh / not-for-me tap on each card is real signal;
+  recommendations adapt and justify themselves ("high depth + intensity — matches your taste").
 
-Free text **or** `dish_id` → cuisine-blind canonical dish → embed → link-or-mint → log.
+> **Status — full stack.** FastAPI backend (5 services + a Celery batch scheduler + Azure Blob
+> photo uploads; 51 tests) and a React Native client (Feed / Log / Taste; 10 tests). Every
+> backend adapter is verified against real Postgres+pgvector, Redis, and Azurite; the whole app
+> bundles via Metro.
+
+---
+
+## How it works — the dedup gate
+
+Free text **or** a known `dish_id` → cuisine-blind canonical dish → embed → link-or-mint → log.
 
 ```
 dish_id present ──────────────► validate + log it           (no LLM, no embed)
@@ -35,7 +44,8 @@ so distinct dishes don't collapse. The test suite asserts this directly.
 - `app/ports.py` — `Embedder`, `DishNormalizer`, `DishRepository` protocols (+ dataclasses).
 - `app/services/ingestion.py` — the gate. DB- and vendor-agnostic; depends only on ports.
 - `app/adapters/` — `repo_pgvector` (asyncpg + pgvector), `repo_memory` (in-memory),
-  `embeddings_openai`, `llm_anthropic`. Heavy SDKs are imported **lazily**.
+  `embeddings_openai`, `llm_openai` (OpenAI powers both embeddings and the combined
+  normalize+flavor call), `storage` (Azure Blob). Heavy SDKs are imported **lazily**.
 - `app/main.py` — FastAPI; real adapters are wired in at startup via `app.dependency_overrides`.
 
 ## Run
@@ -48,7 +58,7 @@ docker compose -f ../docker-compose.yml up -d            # Postgres + pgvector
 export DP_DATABASE_URL=postgresql://dishport:dishport@localhost:5432/dishport
 psql "$DP_DATABASE_URL" -f migrations/001_init.sql
 psql "$DP_DATABASE_URL" -f migrations/002_flavor_svd.sql
-export DP_OPENAI_API_KEY=...  DP_ANTHROPIC_API_KEY=...
+export DP_OPENAI_API_KEY=...                             # powers embeddings + flavor scoring
 uvicorn app.main:app --reload                            # http://localhost:8000/docs
 
 psql "$DP_DATABASE_URL" -f migrations/003_cf.sql
@@ -85,5 +95,18 @@ pytest -q          # dedup gate + endpoints, on in-memory fakes (no DB, no keys)
 | GET | `/recommendations?user_id=&n=` | — | the ensemble + per-item flavor-factor explanation (Service 5) |
 | GET | `/users/{id}/taste-profile` | — | factor prefs + representative dishes (Service 5) |
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for the system design and decisions, and
-[MORNING_REVIEW.md](./MORNING_REVIEW.md) for the overnight build log + QA checklist.
+## Frontend (React Native / Expo)
+
+```bash
+cd frontend
+npm install
+npx expo start            # open in Expo Go or a simulator
+npm run typecheck         # tsc --noEmit
+npm test                  # jest-expo + React Native Testing Library
+```
+
+Three tabs — **Feed** (recommendations with reasons + impression tracking), **Log** (free-text
+or pick a dish, sentiment, optional photo), **Taste** (your flavor-factor profile). Design tokens
+live in `src/theme/tokens.ts`; server state via TanStack Query, local state via Zustand. Photos
+upload straight to Azure Blob via a presigned URL — the canonical `dish_id` reconciles when the
+server's dedup response lands (optimistic logging).

@@ -31,18 +31,17 @@ services:
       timeout: 3s
       retries: 20
 
-  # S3-compatible object storage for dish photos (local stand-in for AWS S3).
-  # Console at http://localhost:9001 (minioadmin / minioadmin). Create the bucket with
-  # scripts/smoke_storage.py (idempotent) or the MinIO console.
-  minio:
-    image: minio/minio:latest
-    container_name: dishport-minio
-    command: server /data --console-address ":9001"
+  # Azure Blob Storage emulator (local stand-in for a real storage account). The container's
+  # default credentials are Azurite's well-known dev account. Create the container with
+  # scripts/smoke_storage.py (idempotent).
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: dishport-azurite
+    command: azurite-blob --blobHost 0.0.0.0 --blobPort 10000 --location /data --skipApiVersionCheck
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      # Custom dev account so the key is a known-valid base64 (matches the backend config).
+      AZURITE_ACCOUNTS: "devstoreaccount1:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4v"
     ports:
-      - "${DP_MINIO_PORT:-9000}:9000"
-      - "${DP_MINIO_CONSOLE_PORT:-9001}:9001"
+      - "${DP_AZURITE_PORT:-10000}:10000"
     volumes:
-      - ./miniodata:/data
+      - ./azuritedata:/data

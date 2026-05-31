@@ -44,6 +44,7 @@ interface PresignResponse {
   upload_url: string;
   public_url: string;
   key: string;
+  headers: Record<string, string>; // exact headers to send with the PUT (provider-specific)
 }
 
 export const api = {
@@ -70,11 +71,11 @@ export const api = {
 
 /** Presign + PUT a local image straight to S3; returns the public URL to attach to a log. */
 export async function uploadPhoto(uri: string, contentType = 'image/jpeg'): Promise<string> {
-  const { upload_url, public_url } = await api.presignUpload(contentType);
+  const { upload_url, public_url, headers } = await api.presignUpload(contentType);
   const res = await FileSystem.uploadAsync(upload_url, uri, {
     httpMethod: 'PUT',
     uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-    headers: { 'Content-Type': contentType },
+    headers: { 'Content-Type': contentType, ...(headers ?? {}) },
   });
   if (res.status < 200 || res.status >= 300) {
     throw new Error(`photo upload failed (HTTP ${res.status})`);

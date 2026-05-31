@@ -85,11 +85,20 @@ class DishNormalizer(Protocol):
     async def normalize(self, text: str) -> NormalizedDish: ...
 
 
+@dataclass(frozen=True)
+class PresignedUpload:
+    """A direct-to-storage upload target: the URL plus the exact headers the client must send.
+    Carrying the headers here keeps the client provider-agnostic (e.g. Azure's
+    `x-ms-blob-type: BlockBlob` lives in the adapter, not the app)."""
+    url: str
+    headers: dict[str, str]
+
+
 @runtime_checkable
 class Storage(Protocol):
-    """Object storage for dish photos (S3 / MinIO). Presigned PUT + public URL."""
+    """Object storage for dish photos (Azure Blob). Presigned PUT + public URL."""
 
-    def presign_put(self, key: str, content_type: str, expires: int = 3600) -> str: ...
+    def presign_put(self, key: str, content_type: str, expires: int = 3600) -> PresignedUpload: ...
     def public_url(self, key: str) -> str: ...
 
 

@@ -134,6 +134,7 @@ class PresignResponse(BaseModel):
     upload_url: str
     public_url: str
     key: str
+    headers: dict[str, str] = {}   # exact headers the client must send with the PUT
 
 
 class TasteProfileOut(BaseModel):

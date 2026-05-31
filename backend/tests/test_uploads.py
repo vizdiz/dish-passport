@@ -5,12 +5,16 @@ from fastapi.testclient import TestClient
 
 from app import deps
 from app.main import app
+from app.ports import PresignedUpload
 from tests.fakes import StubEmbedder, StubNormalizer, axis0, flat_flavor
 
 
 class StubStorage:
-    def presign_put(self, key: str, content_type: str, expires: int = 3600) -> str:
-        return f"https://put.local/{key}?ct={content_type}"
+    def presign_put(self, key: str, content_type: str, expires: int = 3600) -> PresignedUpload:
+        return PresignedUpload(
+            url=f"https://put.local/{key}?ct={content_type}",
+            headers={"x-ms-blob-type": "BlockBlob", "Content-Type": content_type},
+        )
 
     def public_url(self, key: str) -> str:
         return f"https://cdn.local/{key}"
@@ -30,6 +34,7 @@ def test_presign_returns_key_and_urls():
         assert body["key"].startswith("photos/") and body["key"].endswith(".jpg")
         assert body["key"] in body["public_url"]
         assert body["upload_url"].startswith("https://put.local/")
+        assert body["headers"]["x-ms-blob-type"] == "BlockBlob"   # provider-specific header in response
     finally:
         app.dependency_overrides.clear()
 

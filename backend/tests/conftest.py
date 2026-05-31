@@ -26,7 +26,7 @@ def make_client():
         app.dependency_overrides[deps.get_embedder] = lambda: embedder
         app.dependency_overrides[deps.get_normalizer] = lambda: normalizer
         app.dependency_overrides[deps.get_settings] = lambda: Settings(
-            dedup_tau=tau, database_url=None, openai_api_key=None, anthropic_api_key=None
+            dedup_tau=tau, database_url=None, openai_api_key=None
         )
         client = TestClient(app)
         created.append(client)

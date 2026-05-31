@@ -24,9 +24,9 @@ def get_settings() -> Settings:
 
 @lru_cache
 def get_storage() -> Storage:
-    from app.services.storage import S3Storage
+    from app.services.storage import AzureBlobStorage
 
-    return S3Storage(get_settings())
+    return AzureBlobStorage(get_settings())
 
 
 def get_repo() -> DishRepository:  # pragma: no cover - overridden at startup / in tests

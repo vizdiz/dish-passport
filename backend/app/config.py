@@ -19,23 +19,26 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/1"
 
-    # S3 (dish photos). Defaults target local MinIO; for AWS set DP_S3_ENDPOINT_URL=""
-    # (or the real endpoint), real keys, and DP_S3_PUBLIC_URL_BASE (bucket/CDN URL).
-    s3_bucket: str = "dishport-photos"
-    s3_region: str = "us-east-1"
-    s3_endpoint_url: str | None = "http://localhost:9000"
-    s3_access_key: str = "minioadmin"
-    s3_secret_key: str = "minioadmin"
-    s3_public_url_base: str | None = None  # defaults to endpoint + bucket
+    # Azure Blob Storage (dish photos). Defaults target the local Azurite emulator with a
+    # generated dev key (matches AZURITE_ACCOUNTS in docker-compose; a local stand-in, not a
+    # secret). In prod set DP_AZURE_STORAGE_CONNECTION_STRING to the real account and
+    # DP_AZURE_BLOB_PUBLIC_BASE to the public container / CDN base.
+    azure_storage_connection_string: str = (
+        "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;"
+        "AccountKey=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4v;"
+        "BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;"
+    )
+    azure_storage_container: str = "dishport-photos"
+    azure_blob_public_base: str | None = None  # defaults to blob endpoint + container
 
-    # Providers. Absent in tests (in-memory fakes); required to actually run the gate.
+    # Provider. Absent in tests (in-memory fakes); required to actually run the gate.
+    # OpenAI powers BOTH embeddings and the flavor/normalization call.
     openai_api_key: str | None = None
-    anthropic_api_key: str | None = None
 
     # Models.
     embedding_model: str = "text-embedding-3-small"
     embedding_dim: int = 1536
-    flavor_model: str = "claude-sonnet-4-6"
+    flavor_model: str = "gpt-4o-mini"
 
     # Dedup gate.
     dedup_tau: float = 0.90

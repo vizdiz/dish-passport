@@ -88,7 +88,7 @@ def test_fastlane_works_with_only_repo_wired(repo):
     dish = _seed(repo)
     app.dependency_overrides[deps.get_repo] = lambda: repo
     app.dependency_overrides[deps.get_settings] = lambda: Settings(
-        dedup_tau=0.90, database_url=None, openai_api_key=None, anthropic_api_key=None
+        dedup_tau=0.90, database_url=None, openai_api_key=None
     )
     # Deliberately do NOT override get_embedder / get_normalizer -> lazy unconfigured providers.
     try:

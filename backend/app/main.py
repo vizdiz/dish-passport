@@ -37,17 +37,18 @@ async def lifespan(app: FastAPI):
 
     if settings.openai_api_key:
         from app.adapters.embeddings_openai import OpenAIEmbedder
+        from app.adapters.llm_openai import OpenAINormalizer
 
         embedder = OpenAIEmbedder(settings.openai_api_key, settings.embedding_model)
+        normalizer = OpenAINormalizer(settings.openai_api_key, settings.flavor_model)
         app.dependency_overrides[deps.get_embedder] = lambda: embedder
-        logger.info("wired OpenAIEmbedder (%s)", settings.embedding_model)
-
-    if settings.anthropic_api_key:
-        from app.adapters.llm_anthropic import AnthropicNormalizer
-
-        normalizer = AnthropicNormalizer(settings.anthropic_api_key, settings.flavor_model)
         app.dependency_overrides[deps.get_normalizer] = lambda: normalizer
-        logger.info("wired AnthropicNormalizer (%s)", settings.flavor_model)
+        logger.info(
+            "wired OpenAI embedder (%s) + normalizer (%s)",
+            settings.embedding_model, settings.flavor_model,
+        )
+    else:
+        logger.warning("DP_OPENAI_API_KEY unset — embedder/normalizer not wired; mint path will fail.")
 
     try:
         yield
