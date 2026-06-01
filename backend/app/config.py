@@ -45,7 +45,9 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24 * 30  # 30 days (mobile-friendly)
 
-    # Dedup gate.
-    dedup_tau: float = 0.90
+    # Dedup gate. 0.80 calibrated on real text-embedding-3-small over the enriched embedding
+    # text (name+description+ingredients+prep): links true paraphrases (0.80-0.99), separates
+    # distinct dishes (<=0.73), see scripts/calibrate_dedup.py.
+    dedup_tau: float = 0.80
 
     log_level: str = "INFO"

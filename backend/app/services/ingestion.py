@@ -13,12 +13,24 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from app.ports import DishNormalizer, DishRecord, DishRepository, Embedder
+from app.ports import DishNormalizer, DishRecord, DishRepository, Embedder, NormalizedDish
 from app.services.errors import DishNotFound  # re-exported for callers/tests
 
 logger = logging.getLogger("dishport.ingestion")
 
-__all__ = ["DishNotFound", "LogResult", "log_dish"]
+__all__ = ["DishNotFound", "LogResult", "embedding_text", "log_dish"]
+
+
+def embedding_text(normalized: NormalizedDish) -> str:
+    """The text we embed for dedup + retrieval: canonical name + description + ingredients +
+    prep, together. Richer and more stable than the description alone, so paraphrases of the
+    same dish land closer and distinct dishes stay separable (calibrated on real embeddings)."""
+    parts = [normalized.name, normalized.description]
+    if normalized.ingredients:
+        parts.append("Ingredients: " + ", ".join(normalized.ingredients))
+    if normalized.prep_method:
+        parts.append("Prep: " + normalized.prep_method)
+    return "\n".join(p for p in parts if p)
 
 
 @dataclass(frozen=True)
@@ -61,7 +73,7 @@ async def log_dish(
     # ---- Novel free text: normalize (1 LLM call) -> embed description -> nearest. ----
     assert text is not None
     normalized = await normalizer.normalize(text)
-    embedding = await embedder.embed(normalized.description)
+    embedding = await embedder.embed(embedding_text(normalized))
     neighbor = await repo.nearest(embedding)
 
     if neighbor is not None and neighbor.cosine >= tau:

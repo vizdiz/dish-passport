@@ -96,6 +96,11 @@ class StubEmbedder:
 
     async def embed(self, text: str) -> list[float]:
         self.calls += 1
+        # Substring match: the gate embeds a composite (name + description + ...), so a mapping
+        # keyed on the description still resolves.
         if text in self._mapping:
             return list(self._mapping[text])
+        for key, vec in self._mapping.items():
+            if key in text:
+                return list(vec)
         return hash_vec(text)

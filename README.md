@@ -29,15 +29,17 @@ Free text **or** a known `dish_id` → cuisine-blind canonical dish → embed �
 ```
 dish_id present ──────────────► validate + log it           (no LLM, no embed)
 free text ─► normalize (1 LLM call: name + cuisine-blind description + 10-dim flavor)
-          ─► embed(description)  (text-embedding-3-small, 1536d)
+          ─► embed(name + description + ingredients)  (text-embedding-3-small, 1536d)
           ─► nearest dish in pgvector (cosine via `<=>`)
-          ─► cosine ≥ DP_DEDUP_TAU (0.90)?  LINK existing (reuse flavor)
+          ─► cosine ≥ DP_DEDUP_TAU (0.80)?  LINK existing (reuse flavor)
                                      else    MINT new (with scored flavor)
           ─► write log(sentiment); decision is logged for human audit
 ```
 
-`DP_DEDUP_TAU` sits **above** kindred cross-cuisine similarity (al pastor ~ shawarma ≈ 0.85),
-so distinct dishes don't collapse. The test suite asserts this directly.
+`DP_DEDUP_TAU` (**0.80**) was calibrated on real `text-embedding-3-small` cosines over the
+enriched embedding text (`scripts/calibrate_dedup.py`): true paraphrases of one dish land
+0.80-0.99 (e.g. chicken tikka masala ~ murgh tikka masala ≈ 0.97), while distinct dishes stay
+≤ ~0.73, so they don't collapse.
 
 ### Architecture (ports / adapters)
 
