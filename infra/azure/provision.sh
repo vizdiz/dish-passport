@@ -12,6 +12,9 @@ set -uo pipefail
 
 RG=dishport-rg
 LOC=eastus
+# Postgres Flexible Server may be region-restricted on credit subscriptions (eastus was, for
+# this one). Keep its region separate; westus3 was allowed. Override with PG_LOC=... if needed.
+PG_LOC="${PG_LOC:-westus3}"
 SFX=$(openssl rand -hex 3)
 ACR=dishportacr${SFX}
 PG=dishport-pg-${SFX}
@@ -38,8 +41,8 @@ ST_CONN=$(az storage account show-connection-string -g "$RG" -n "$ST" --query co
 az storage container create --name dishport-photos --connection-string "$ST_CONN" \
   --public-access blob -o none || log "WARN: container create"
 
-log "postgres flexible server ${PG} (B1ms, pg16) — slow (~5-10 min)"
-az postgres flexible-server create -g "$RG" -n "$PG" -l "$LOC" \
+log "postgres flexible server ${PG} (B1ms, pg16) @ ${PG_LOC} — slow (~5-10 min)"
+az postgres flexible-server create -g "$RG" -n "$PG" -l "$PG_LOC" \
   --tier Burstable --sku-name Standard_B1ms --storage-size 32 --version 16 \
   --admin-user "$PGADMIN" --admin-password "$PGPASS" \
   --public-access 0.0.0.0 --yes -o none || log "WARN: postgres create"
@@ -62,6 +65,7 @@ cat > "$OUT" <<EOF
 # Azure deploy config — GITIGNORED. Generated $(date -u +%Y-%m-%dT%H:%M:%SZ).
 AZ_RG=${RG}
 AZ_LOC=${LOC}
+AZ_PG_LOC=${PG_LOC}
 AZ_ACR=${ACR}
 AZ_ACR_LOGIN=${ACR_LOGIN}
 AZ_PG=${PG}
