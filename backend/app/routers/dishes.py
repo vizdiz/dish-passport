@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.deps import get_repo
+from app.deps import get_current_user, get_repo
 from app.ports import DishRepository
 from app.schemas import DishOut, FactorScore, SimilarNeighbor, SimilarResponse
 from app.services.errors import DishNotFound
@@ -15,6 +15,7 @@ router = APIRouter(tags=["dishes"])
 @router.get("/dishes/{dish_id}", response_model=DishOut)
 async def get_dish(
     dish_id: int,
+    _user: int = Depends(get_current_user),
     repo: DishRepository = Depends(get_repo),
 ) -> DishOut:
     dish = await repo.get_dish(dish_id)
@@ -38,6 +39,7 @@ async def get_dish(
 async def get_similar(
     dish_id: int,
     n: int = Query(default=10, ge=1, le=50),
+    _user: int = Depends(get_current_user),
     repo: DishRepository = Depends(get_repo),
 ) -> SimilarResponse:
     """Pure big-vector cosine neighbors (Service 2). Self excluded, ranked by cosine."""

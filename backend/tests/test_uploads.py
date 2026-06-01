@@ -22,6 +22,7 @@ class StubStorage:
 
 def _with_stub_storage() -> TestClient:
     app.dependency_overrides[deps.get_storage] = lambda: StubStorage()
+    app.dependency_overrides[deps.get_current_user] = lambda: 1
     return TestClient(app)
 
 

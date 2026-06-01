@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     embedding_dim: int = 1536
     flavor_model: str = "gpt-4o-mini"
 
+    # Auth (JWT). Set a strong DP_JWT_SECRET in any real deployment (>= 32 bytes).
+    jwt_secret: str = "dev-only-insecure-secret-change-me-in-production"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 60 * 24 * 30  # 30 days (mobile-friendly)
+
     # Dedup gate.
     dedup_tau: float = 0.90
 

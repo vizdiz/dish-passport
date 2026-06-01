@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app import deps
-from app.routers import dishes, impressions, logs, recommendations, uploads, users
+from app.routers import auth, dishes, impressions, logs, recommendations, uploads, users
 
 logger = logging.getLogger("dishport")
 
@@ -58,6 +58,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Dish Passport — Ingestion", version="0.1.0", lifespan=lifespan)
+app.include_router(auth.router)
 app.include_router(logs.router)
 app.include_router(dishes.router)
 app.include_router(impressions.router)

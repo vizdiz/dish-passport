@@ -90,7 +90,7 @@ def test_patch_log_flavor_override(repo, make_client):
     dish = repo.seed_dish(name="Tonkotsu", description="rich pork broth ramen",
                           flavor=[0.5] * 10, embedding=axis0())
     client = make_client(repo, StubEmbedder(), StubNormalizer())
-    log_id = client.post("/logs", json={"user_id": 1, "dish_id": dish.id}).json()["log_id"]
+    log_id = client.post("/logs", json={"dish_id": dish.id}).json()["log_id"]
 
     new_flavor = {dim: 0.3 for dim in FLAVOR_DIMS}
     new_flavor["umami"] = 0.95
@@ -104,7 +104,7 @@ def test_patch_log_flavor_override(repo, make_client):
 def test_patch_log_flavor_validation(repo, make_client):
     dish = repo.seed_dish(name="x", description="x", flavor=[0.5] * 10, embedding=axis0())
     client = make_client(repo, StubEmbedder(), StubNormalizer())
-    log_id = client.post("/logs", json={"user_id": 1, "dish_id": dish.id}).json()["log_id"]
+    log_id = client.post("/logs", json={"dish_id": dish.id}).json()["log_id"]
 
     bad_keys = client.patch(f"/logs/{log_id}/flavor", json={"flavor": {"umami": 0.5}})
     assert bad_keys.status_code == 422

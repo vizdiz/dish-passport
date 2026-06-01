@@ -108,7 +108,7 @@ def test_recommendations_endpoint(repo, make_client):
     asyncio.run(_build_world(repo))
     client = make_client(repo, StubEmbedder(), StubNormalizer())
 
-    resp = client.get("/recommendations?user_id=1&n=5")
+    resp = client.get("/recommendations?n=5")   # user_id comes from the auth token (== 1)
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["cold_start"] is False
@@ -119,9 +119,9 @@ def test_recommendations_endpoint(repo, make_client):
 
 def test_taste_profile_endpoint_and_404(repo, make_client):
     asyncio.run(_build_world(repo))
-    client = make_client(repo, StubEmbedder(), StubNormalizer())
+    client = make_client(repo, StubEmbedder(), StubNormalizer(), user=1)
 
-    ok = client.get("/users/1/taste-profile")
+    ok = client.get("/users/me/taste-profile")   # "me" == authenticated user 1
     assert ok.status_code == 200, ok.text
     body = ok.json()
     assert body["n_dishes"] > 0
@@ -129,4 +129,6 @@ def test_taste_profile_endpoint_and_404(repo, make_client):
     assert body["has_disliked_centroid"] is True               # user 1 disliked D9
     assert body["flavor_factor_pref"] is not None
 
-    assert client.get("/users/424242/taste-profile").status_code == 404
+    # A user with no profile yet -> 404 (authenticated as a never-logged user).
+    stranger = make_client(repo, StubEmbedder(), StubNormalizer(), user=424242)
+    assert stranger.get("/users/me/taste-profile").status_code == 404

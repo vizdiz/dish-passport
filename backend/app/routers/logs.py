@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.config import Settings
-from app.deps import get_embedder, get_normalizer, get_repo, get_settings
+from app.deps import get_current_user, get_embedder, get_normalizer, get_repo, get_settings
 from app.ports import DishNormalizer, DishRepository, Embedder
 from app.schemas import (
     DishOut,
@@ -21,6 +21,7 @@ router = APIRouter(tags=["logs"])
 @router.post("/logs", response_model=LogResponse)
 async def create_log(
     body: LogRequest,
+    user_id: int = Depends(get_current_user),
     repo: DishRepository = Depends(get_repo),
     embedder: Embedder = Depends(get_embedder),
     normalizer: DishNormalizer = Depends(get_normalizer),
@@ -31,7 +32,7 @@ async def create_log(
             repo=repo,
             embedder=embedder,
             normalizer=normalizer,
-            user_id=body.user_id,
+            user_id=user_id,
             text=body.text,
             dish_id=body.dish_id,
             sentiment=body.sentiment,
@@ -54,11 +55,12 @@ async def create_log(
 async def refine_flavor(
     log_id: int,
     body: FlavorOverrideRequest,
+    user_id: int = Depends(get_current_user),
     repo: DishRepository = Depends(get_repo),
 ) -> FlavorOverrideResponse:
-    """User refines the 10 flavor dims for a log (implicit signal; Service 3)."""
-    vector = body.as_vector()
-    ok = await repo.set_log_flavor_override(log_id, vector)
-    if not ok:
+    """User refines the 10 flavor dims for one of THEIR logs (implicit signal; Service 3)."""
+    if not await repo.log_belongs_to(log_id, user_id):
         raise HTTPException(status_code=404, detail=f"log {log_id} not found")
+    vector = body.as_vector()
+    await repo.set_log_flavor_override(log_id, vector)
     return FlavorOverrideResponse(log_id=log_id, flavor_override=flavor_to_dict(vector))

@@ -13,6 +13,9 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
 from app.config import Settings
 from app.ports import DishNormalizer, DishRepository, Embedder, NormalizedDish, Storage
 
@@ -64,3 +67,24 @@ def get_embedder() -> Embedder:
 
 def get_normalizer() -> DishNormalizer:
     return _UnconfiguredNormalizer()
+
+
+_bearer = HTTPBearer(auto_error=False)
+
+
+def get_current_user(
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    settings: Settings = Depends(get_settings),
+) -> int:
+    """Resolve the authenticated user_id from the Bearer JWT. 401 if missing/invalid."""
+    if creds is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated")
+    from app.security import decode_token
+
+    try:
+        return decode_token(creds.credentials, secret=settings.jwt_secret,
+                            algorithm=settings.jwt_algorithm)
+    except Exception as exc:  # noqa: BLE001 - any decode failure is an auth failure
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid or expired token"
+        ) from exc

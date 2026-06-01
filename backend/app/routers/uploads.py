@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends
 
-from app.deps import get_storage
+from app.deps import get_current_user, get_storage
 from app.ports import Storage
 from app.schemas import PresignRequest, PresignResponse
 from app.services.storage import ALLOWED_CONTENT_TYPES
@@ -15,6 +15,7 @@ router = APIRouter(tags=["uploads"])
 @router.post("/uploads/presign", response_model=PresignResponse)
 async def presign_upload(
     body: PresignRequest,
+    user_id: int = Depends(get_current_user),
     storage: Storage = Depends(get_storage),
 ) -> PresignResponse:
     """Mint a presigned PUT URL for a dish photo. The client uploads straight to S3, then

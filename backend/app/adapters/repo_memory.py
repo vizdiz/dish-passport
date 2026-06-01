@@ -14,6 +14,7 @@ from app.ports import (
     SvdModel,
     TasteProfile,
 )
+from app.services.errors import UserExists
 
 
 def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
@@ -40,8 +41,26 @@ class InMemoryDishRepository:
         self._cf_user: dict[int, tuple[list[float], str]] = {}
         self._cf_item: dict[int, tuple[list[float], str]] = {}
         self._taste: dict[int, TasteProfile] = {}
+        self._users_by_name: dict[str, tuple[int, str]] = {}  # username -> (id, password_hash)
         self._next_dish = 1
         self._next_log = 1
+        self._next_user = 1
+
+    # ---- auth / users ----
+    async def create_user(self, username: str, password_hash: str) -> int:
+        if username in self._users_by_name:
+            raise UserExists(username)
+        user_id = self._next_user
+        self._next_user += 1
+        self._users_by_name[username] = (user_id, password_hash)
+        self._user_log_count.setdefault(user_id, 0)
+        return user_id
+
+    async def get_user_by_username(self, username: str) -> Optional[tuple[int, str]]:
+        return self._users_by_name.get(username)
+
+    async def log_belongs_to(self, log_id: int, user_id: int) -> bool:
+        return any(log["id"] == log_id and log["user_id"] == user_id for log in self._logs)
 
     # ---- DishRepository ----
     async def get_dish(self, dish_id: int) -> Optional[DishRecord]:

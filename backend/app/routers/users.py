@@ -2,16 +2,16 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.deps import get_repo
+from app.deps import get_current_user, get_repo
 from app.ports import DishRepository
 from app.schemas import DishOut, FactorScore, TasteProfileOut
 
 router = APIRouter(tags=["taste"])
 
 
-@router.get("/users/{user_id}/taste-profile", response_model=TasteProfileOut)
+@router.get("/users/me/taste-profile", response_model=TasteProfileOut)
 async def get_taste_profile(
-    user_id: int,
+    user_id: int = Depends(get_current_user),
     repo: DishRepository = Depends(get_repo),
 ) -> TasteProfileOut:
     profile = await repo.get_taste_profile(user_id)

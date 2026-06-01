@@ -19,7 +19,7 @@ def _seed(repo, name="Pho", description="aromatic beef noodle broth"):
 def test_post_logs_text_mints(repo, make_client):
     client = make_client(repo, StubEmbedder(), StubNormalizer())
 
-    resp = client.post("/logs", json={"user_id": 1, "text": "green papaya salad"})
+    resp = client.post("/logs", json={"text": "green papaya salad"})
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -32,8 +32,8 @@ def test_post_logs_text_mints(repo, make_client):
 def test_post_logs_requires_text_xor_dish_id(repo, make_client):
     client = make_client(repo, StubEmbedder(), StubNormalizer())
 
-    both = client.post("/logs", json={"user_id": 1, "text": "x", "dish_id": 1})
-    neither = client.post("/logs", json={"user_id": 1})
+    both = client.post("/logs", json={"text": "x", "dish_id": 1})
+    neither = client.post("/logs", json={})
 
     assert both.status_code == 422
     assert neither.status_code == 422
@@ -44,7 +44,7 @@ def test_post_logs_dish_id_fastlane(repo, make_client):
     embedder, normalizer = StubEmbedder(), StubNormalizer()
     client = make_client(repo, embedder, normalizer)
 
-    resp = client.post("/logs", json={"user_id": 2, "dish_id": dish.id})
+    resp = client.post("/logs", json={"dish_id": dish.id})
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -70,10 +70,8 @@ def test_post_impressions_ingest(repo, make_client):
     client = make_client(repo, StubEmbedder(), StubNormalizer())
 
     payload = [
-        {"user_id": 1, "dish_id": 10, "shown_at": "2026-05-30T08:00:00Z",
-         "context": "feed", "converted": False},
-        {"user_id": 1, "dish_id": 11, "shown_at": "2026-05-30T08:00:01Z",
-         "context": "recs", "converted": True},
+        {"dish_id": 10, "shown_at": "2026-05-30T08:00:00Z", "context": "feed", "converted": False},
+        {"dish_id": 11, "shown_at": "2026-05-30T08:00:01Z", "context": "recs", "converted": True},
     ]
     resp = client.post("/impressions", json=payload)
 
@@ -87,6 +85,7 @@ def test_fastlane_works_with_only_repo_wired(repo):
     'no LLM, no embed' promise holds at the DI layer. The text path then fails clearly."""
     dish = _seed(repo)
     app.dependency_overrides[deps.get_repo] = lambda: repo
+    app.dependency_overrides[deps.get_current_user] = lambda: 1
     app.dependency_overrides[deps.get_settings] = lambda: Settings(
         dedup_tau=0.90, database_url=None, openai_api_key=None
     )
@@ -94,13 +93,13 @@ def test_fastlane_works_with_only_repo_wired(repo):
     try:
         client = TestClient(app, raise_server_exceptions=False)
 
-        fastlane = client.post("/logs", json={"user_id": 1, "dish_id": dish.id})
+        fastlane = client.post("/logs", json={"dish_id": dish.id})
         assert fastlane.status_code == 200, fastlane.text
         assert fastlane.json()["is_new"] is False
 
         assert client.get(f"/dishes/{dish.id}").status_code == 200
 
-        text_path = client.post("/logs", json={"user_id": 1, "text": "needs an embedder"})
+        text_path = client.post("/logs", json={"text": "needs an embedder"})
         assert text_path.status_code == 500   # raised only when it actually tries to embed
     finally:
         app.dependency_overrides.clear()

@@ -1,4 +1,4 @@
-# Runtime deps for Service 1 (Ingestion).
+# Backend runtime dependencies.
 fastapi>=0.115,<1.0
 uvicorn[standard]>=0.30
 pydantic>=2.7
@@ -8,3 +8,5 @@ pgvector>=0.3.6
 openai>=1.40
 celery[redis]>=5.3
 azure-storage-blob>=12.19
+pyjwt>=2.8
+bcrypt>=4.1

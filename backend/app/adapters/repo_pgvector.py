@@ -20,6 +20,7 @@ from app.ports import (
     SvdModel,
     TasteProfile,
 )
+from app.services.errors import UserExists
 
 _DISH_COLS = (
     "id, name, canonical_description, ingredients, prep_method, "
@@ -55,6 +56,31 @@ def _to_record(row: asyncpg.Record) -> DishRecord:
 class PgVectorRepository:
     def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool
+
+    # ---- auth / users ----
+    async def create_user(self, username: str, password_hash: str) -> int:
+        async with self._pool.acquire() as conn:
+            try:
+                return await conn.fetchval(
+                    "INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id",
+                    username, password_hash,
+                )
+            except asyncpg.UniqueViolationError as exc:
+                raise UserExists(username) from exc
+
+    async def get_user_by_username(self, username: str) -> Optional[tuple[int, str]]:
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT id, password_hash FROM users WHERE username = $1", username
+            )
+        return (row["id"], row["password_hash"]) if row is not None else None
+
+    async def log_belongs_to(self, log_id: int, user_id: int) -> bool:
+        async with self._pool.acquire() as conn:
+            found = await conn.fetchval(
+                "SELECT 1 FROM logs WHERE id = $1 AND user_id = $2", log_id, user_id
+            )
+        return found is not None
 
     async def get_dish(self, dish_id: int) -> Optional[DishRecord]:
         async with self._pool.acquire() as conn:
