@@ -22,6 +22,7 @@ web-build/
 # ---- Secrets / local ----
 .env
 .env.local
+.azure-deploy.env
 *.pem
 .DS_Store
 

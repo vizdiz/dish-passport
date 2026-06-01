@@ -9,7 +9,6 @@ import { useLogDish } from '../api/hooks';
 import type { LogResponse, Sentiment } from '../api/types';
 import { DishCard } from '../components/DishCard';
 import { SentimentControl } from '../components/SentimentControl';
-import { useSession } from '../store/session';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
 import { Button } from '../ui/Button';
@@ -17,10 +16,9 @@ import { Input } from '../ui/Input';
 import { Text } from '../ui/Text';
 
 export function LogScreen() {
-  const userId = useSession((s) => s.userId);
   const insets = useSafeAreaInsets();
   const { c } = useTheme();
-  const logDish = useLogDish(userId);
+  const logDish = useLogDish();
 
   const [text, setText] = useState('');
   const [sentiment, setSentiment] = useState<Sentiment>('liked');

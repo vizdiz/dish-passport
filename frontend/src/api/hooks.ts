@@ -6,8 +6,8 @@ import type { LogRequest } from './types';
 export const qk = {
   dish: (id: number) => ['dish', id] as const,
   similar: (id: number, n: number) => ['similar', id, n] as const,
-  recommendations: (userId: number, n: number) => ['recommendations', userId, n] as const,
-  taste: (userId: number) => ['taste', userId] as const,
+  recommendations: (n: number) => ['recommendations', n] as const,
+  taste: () => ['taste'] as const,
 };
 
 export function useDish(id: number) {
@@ -26,29 +26,29 @@ export function useSimilar(id: number, n = 10) {
   });
 }
 
-export function useRecommendations(userId: number, n = 10) {
+export function useRecommendations(n = 10) {
   return useQuery({
-    queryKey: qk.recommendations(userId, n),
-    queryFn: () => api.getRecommendations(userId, n),
+    queryKey: qk.recommendations(n),
+    queryFn: () => api.getRecommendations(n),
   });
 }
 
-export function useTasteProfile(userId: number) {
+export function useTasteProfile() {
   return useQuery({
-    queryKey: qk.taste(userId),
-    queryFn: () => api.getTasteProfile(userId),
+    queryKey: qk.taste(),
+    queryFn: () => api.getTasteProfile(),
     retry: false, // 404 until rebuild_taste_profiles has run for this user
   });
 }
 
-export function useLogDish(userId: number) {
+export function useLogDish() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: Omit<LogRequest, 'user_id'>) => api.createLog({ ...body, user_id: userId }),
+    mutationFn: (body: LogRequest) => api.createLog(body),
     onSuccess: () => {
       // a new log shifts both the feed and the taste profile inputs
       void qc.invalidateQueries({ queryKey: ['recommendations'] });
-      void qc.invalidateQueries({ queryKey: qk.taste(userId) });
+      void qc.invalidateQueries({ queryKey: qk.taste() });
     },
   });
 }

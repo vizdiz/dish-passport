@@ -4,6 +4,3 @@
  * not localhost. Defaults to the local backend.
  */
 export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000';
-
-/** Dev fallback user id until real auth lands (UserProvider seeds SecureStore with this). */
-export const DEV_USER_ID = 1;

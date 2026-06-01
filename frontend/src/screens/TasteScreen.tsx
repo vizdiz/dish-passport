@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApiError } from '../api/client';
 import { useTasteProfile } from '../api/hooks';
 import type { Dish, FactorScore } from '../api/types';
+import { Button } from '../ui/Button';
 import { DishCard } from '../components/DishCard';
 import { DishDetailSheet } from '../components/DishDetailSheet';
 import { useSession } from '../store/session';
@@ -14,10 +15,10 @@ import { Skeleton } from '../ui/Skeleton';
 import { Text } from '../ui/Text';
 
 export function TasteScreen() {
-  const userId = useSession((s) => s.userId);
   const insets = useSafeAreaInsets();
   const { c } = useTheme();
-  const { data, isLoading, error } = useTasteProfile(userId);
+  const logout = useSession((s) => s.logout);
+  const { data, isLoading, error } = useTasteProfile();
   const [detailId, setDetailId] = useState<number | null>(null);
 
   const notFound = error instanceof ApiError && error.status === 404;
@@ -67,6 +68,13 @@ export function TasteScreen() {
             ) : null}
           </>
         )}
+
+        <Button
+          title="Log out"
+          variant="ghost"
+          onPress={() => void logout()}
+          style={styles.logout}
+        />
       </ScrollView>
       <DishDetailSheet dishId={detailId} onClose={() => setDetailId(null)} />
     </View>
@@ -103,6 +111,7 @@ function FactorBar({ label, value }: { label: string; value: number }) {
 
 const styles = StyleSheet.create({
   content: { padding: space.lg, gap: space.sm, paddingBottom: space['3xl'] },
+  logout: { marginTop: space['2xl'] },
   empty: { marginTop: space.lg },
   section: { marginTop: space.xl, gap: space.sm },
   sectionLabel: { letterSpacing: 0.5 },

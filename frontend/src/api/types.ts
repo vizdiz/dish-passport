@@ -62,7 +62,6 @@ export interface TasteProfile {
 }
 
 export interface ImpressionEvent {
-  user_id: number;
   dish_id: number;
   shown_at: string; // ISO 8601
   context: ImpressionContext;
@@ -70,11 +69,16 @@ export interface ImpressionEvent {
 }
 
 export interface LogRequest {
-  user_id: number;
   text?: string;
   dish_id?: number;
   sentiment?: Sentiment;
   rating?: number;
   notes?: string;
   photo_url?: string;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+  user_id: number;
 }

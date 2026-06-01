@@ -7,7 +7,6 @@ import type { RecommendationItem, Sentiment } from '../api/types';
 import { DishCard } from '../components/DishCard';
 import { DishDetailSheet } from '../components/DishDetailSheet';
 import { useImpressions } from '../store/impressions';
-import { useSession } from '../store/session';
 import { useTheme } from '../theme/ThemeProvider';
 import { space } from '../theme/tokens';
 import { Skeleton } from '../ui/Skeleton';
@@ -16,12 +15,11 @@ import { Text } from '../ui/Text';
 const VIEWABILITY = { itemVisiblePercentThreshold: 50, minimumViewTime: 1000 };
 
 export function FeedScreen() {
-  const userId = useSession((s) => s.userId);
   const insets = useSafeAreaInsets();
   const { c } = useTheme();
-  const { data, isLoading, isError, refetch, isRefetching } = useRecommendations(userId, 12);
+  const { data, isLoading, isError, refetch, isRefetching } = useRecommendations(12);
   const flush = useImpressions((s) => s.flush);
-  const logDish = useLogDish(userId);
+  const logDish = useLogDish();
 
   const [sentiments, setSentiments] = useState<Record<number, Sentiment>>({});
   const [detailId, setDetailId] = useState<number | null>(null);
@@ -37,12 +35,11 @@ export function FeedScreen() {
   // Stable across renders — FlatList requires it. Reads live state via getState().
   const onViewableItemsChanged = useRef((info: { viewableItems: ViewToken[] }) => {
     const now = new Date().toISOString();
-    const uid = useSession.getState().userId;
     const track = useImpressions.getState().track;
     info.viewableItems.forEach((vt) => {
       const item = vt.item as RecommendationItem | undefined;
       if (item?.dish) {
-        track({ user_id: uid, dish_id: item.dish.id, shown_at: now, context: 'recs', converted: false });
+        track({ dish_id: item.dish.id, shown_at: now, context: 'recs', converted: false });
       }
     });
   }).current;

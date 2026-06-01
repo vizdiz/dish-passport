@@ -9,6 +9,7 @@ import type {
   RecommendationsResponse,
   SimilarResponse,
   TasteProfile,
+  TokenResponse,
 } from './types';
 
 export class ApiError extends Error {
@@ -21,11 +22,31 @@ export class ApiError extends Error {
   }
 }
 
+// Auth state lives at module scope so every request carries the bearer token, and a 401
+// anywhere can hand control back to the session (log out). The session store wires both.
+let authToken: string | null = null;
+let onUnauthorized: (() => void) | null = null;
+
+export function setAuthToken(token: string | null): void {
+  authToken = token;
+}
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorized = handler;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-  });
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...((init?.headers as Record<string, string>) ?? {}),
+  };
+  if (authToken) headers.Authorization = `Bearer ${authToken}`;
+
+  const res = await fetch(`${API_URL}${path}`, { ...init, headers });
+
+  if (res.status === 401 && onUnauthorized && !path.startsWith('/auth/')) {
+    onUnauthorized();
+  }
   if (!res.ok) {
     let detail = res.statusText;
     try {
@@ -44,15 +65,25 @@ interface PresignResponse {
   upload_url: string;
   public_url: string;
   key: string;
-  headers: Record<string, string>; // exact headers to send with the PUT (provider-specific)
+  headers: Record<string, string>;
 }
 
 export const api = {
+  register: (username: string, password: string) =>
+    request<TokenResponse>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
+  login: (username: string, password: string) =>
+    request<TokenResponse>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
+
   getDish: (id: number) => request<Dish>(`/dishes/${id}`),
   getSimilar: (id: number, n = 10) => request<SimilarResponse>(`/dishes/${id}/similar?n=${n}`),
-  getRecommendations: (userId: number, n = 10) =>
-    request<RecommendationsResponse>(`/recommendations?user_id=${userId}&n=${n}`),
-  getTasteProfile: (userId: number) => request<TasteProfile>(`/users/${userId}/taste-profile`),
+  getRecommendations: (n = 10) => request<RecommendationsResponse>(`/recommendations?n=${n}`),
+  getTasteProfile: () => request<TasteProfile>('/users/me/taste-profile'),
   createLog: (body: LogRequest) =>
     request<LogResponse>('/logs', { method: 'POST', body: JSON.stringify(body) }),
   refineFlavor: (logId: number, flavor: Record<string, number>) =>
@@ -69,7 +100,7 @@ export const api = {
     }),
 };
 
-/** Presign + PUT a local image straight to S3; returns the public URL to attach to a log. */
+/** Presign + PUT a local image straight to Blob storage; returns the public URL for a log. */
 export async function uploadPhoto(uri: string, contentType = 'image/jpeg'): Promise<string> {
   const { upload_url, public_url, headers } = await api.presignUpload(contentType);
   const res = await FileSystem.uploadAsync(upload_url, uri, {
