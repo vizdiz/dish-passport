@@ -29,6 +29,14 @@ TAG=v1
 IMG="$ACR_LOGIN/$APP:$TAG"
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
+# Container Apps (Consumption) egress IPs aren't fixed and the "Allow Azure services" rule does
+# NOT cover them, so the app's DB connection times out unless the firewall is open. Open it for
+# this dev deploy (DB still protected by a strong password + required SSL).
+# PROD: use a VNet-integrated Container Apps environment + a private Postgres instead.
+log "open DB firewall for the container app (dev)"
+az postgres flexible-server firewall-rule create -g "$RG" -n "$(val AZ_PG)" --rule-name allow-all-dev \
+  --start-ip-address 0.0.0.0 --end-ip-address 255.255.255.255 -o none 2>/dev/null || true
+
 log "cloud-build $IMG"
 az acr build -r "$ACR" -t "$APP:$TAG" "$ROOT/backend" -o none || { log "build FAILED"; exit 1; }
 
