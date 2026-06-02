@@ -1,0 +1,32 @@
+{
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://dishport-api.agreeablesmoke-e44a377c.eastus.azurecontainerapps.io"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "ios": { "simulator": true },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://dishport-api.agreeablesmoke-e44a377c.eastus.azurecontainerapps.io"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://dishport-api.agreeablesmoke-e44a377c.eastus.azurecontainerapps.io"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

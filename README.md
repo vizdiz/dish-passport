@@ -107,10 +107,21 @@ pytest -q          # dedup gate + endpoints, on in-memory fakes (no DB, no keys)
 ```bash
 cd frontend
 npm install
-npx expo start            # open in Expo Go or a simulator
 npm run typecheck         # tsc --noEmit
 npm test                  # jest-expo + React Native Testing Library
+npx expo start            # dev server (uses a dev build — see below, not plain Expo Go)
+
+# native builds via EAS (eas.json wires EXPO_PUBLIC_API_URL to the deployed API):
+eas login && eas init                 # one-time: link an Expo project
+eas build -p ios --profile preview    # simulator build  (or -p android for an APK)
+eas build -p all --profile production # store builds
 ```
+
+This app uses native modules (secure-store, image-picker, file-system), so it needs a
+**development build** (`eas build --profile development` + `expo-dev-client`) or
+`expo run:ios|android` — not plain Expo Go. Builds talk to the deployed API by default
+(`EXPO_PUBLIC_API_URL` in `eas.json`); for local dev against your own backend, set
+`EXPO_PUBLIC_API_URL` before `expo start`.
 
 Three tabs - **Feed** (recommendations with reasons + impression tracking), **Log** (free-text
 or pick a dish, sentiment, optional photo), **Taste** (your flavor-factor profile). Design tokens
