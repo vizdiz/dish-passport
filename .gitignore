@@ -38,3 +38,6 @@ htmlcov/
 # ---- Agent-authored working docs (local only; not in the public repo) ----
 /ARCHITECTURE.md
 /MORNING_REVIEW.md
+frontend/android/
+frontend/ios/
+*.apk

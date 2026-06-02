@@ -9,10 +9,14 @@
     "newArchEnabled": true,
     "backgroundColor": "#FBF7F0",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.dishport.app",
+      "buildNumber": "1"
     },
     "android": {
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.dishport.app",
+      "versionCode": 1
     },
     "plugins": [
       "expo-secure-store",
@@ -23,7 +27,15 @@
         }
       ],
       "expo-font",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "1.9.25"
+          }
+        }
+      ]
     ]
   }
 }
