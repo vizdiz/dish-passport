@@ -91,9 +91,10 @@ export const supabase: SupabaseClient = createClient(
 
 /**
  * Map the username UX onto Supabase email/password auth. Usernames are lowercased and mapped to a
- * synthetic, non-deliverable email so the rest of the auth stack (and the DB trigger that creates
- * the profile from user_metadata.username) can stay email-based.
+ * synthetic email so the rest of the auth stack (and the DB trigger that creates the profile from
+ * user_metadata.username) can stay email-based. NOTE: use a bare domain — GoTrue's email
+ * validator rejects multi-level subdomains like `users.dishport.app`.
  */
 export function usernameToEmail(username: string): string {
-  return `${username.toLowerCase()}@users.dishport.app`;
+  return `${username.toLowerCase()}@dishport.app`;
 }

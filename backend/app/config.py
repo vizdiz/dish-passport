@@ -31,15 +31,34 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("SUPABASE_DB_URL", "database_url"),
     )
 
-    # Supabase-issued JWT verification. HS256, signed with the project's JWT secret. Set a real
-    # SUPABASE_JWT_SECRET in any deployment; the default only lets the app boot locally.
-    supabase_jwt_secret: str = Field(
-        default="dev-only-insecure-secret-change-me-in-production",
+    # Supabase-issued JWT verification. Modern projects sign access tokens ASYMMETRICALLY
+    # (ES256) with a private key Supabase never shares; the worker verifies with the public key
+    # from the project JWKS endpoint. Preferred over a shared HS256 secret (nothing forgeable if
+    # the worker leaks). jwks_url derives from SUPABASE_URL if not set explicitly.
+    supabase_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("SUPABASE_URL", "supabase_url"),
+    )
+    supabase_jwks_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("SUPABASE_JWKS_URL", "supabase_jwks_url"),
+    )
+    # Optional HS256 fallback for legacy projects that still use a shared secret.
+    supabase_jwt_secret: str | None = Field(
+        default=None,
         validation_alias=AliasChoices("SUPABASE_JWT_SECRET", "supabase_jwt_secret"),
     )
-    jwt_algorithm: str = "HS256"
     jwt_audience: str = "authenticated"   # Supabase stamps aud="authenticated"
     jwt_verify_audience: bool = True      # DP_JWT_VERIFY_AUDIENCE=false to disable the aud check
+
+    @property
+    def jwks_url(self) -> str | None:
+        """JWKS endpoint for asymmetric (ES256) verification; derived from SUPABASE_URL."""
+        if self.supabase_jwks_url:
+            return self.supabase_jwks_url
+        if self.supabase_url:
+            return f"{self.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+        return None
 
     # Celery (batch scheduler). Broker + result backend default to local Redis.
     celery_broker_url: str = "redis://localhost:6379/0"

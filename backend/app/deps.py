@@ -56,7 +56,7 @@ class _UnconfiguredEmbedder:
 class _UnconfiguredNormalizer:
     async def normalize(self, text: str) -> NormalizedDish:
         raise RuntimeError(
-            "DishNormalizer is not configured. Set DP_ANTHROPIC_API_KEY so lifespan can wire it, "
+            "DishNormalizer is not configured. Set DP_OPENAI_API_KEY so lifespan can wire it, "
             "or override app.dependency_overrides[get_normalizer]."
         )
 
@@ -72,15 +72,25 @@ def get_normalizer() -> DishNormalizer:
 _bearer = HTTPBearer(auto_error=False)
 
 
+@lru_cache
+def _jwks_client(url: str):
+    """Cached PyJWKClient — fetches/caches the project public keys and refetches on rotation."""
+    from jwt import PyJWKClient
+
+    return PyJWKClient(url)
+
+
 def get_current_user(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     settings: Settings = Depends(get_settings),
 ) -> str:
     """Resolve the authenticated user id (a UUID string) from a Supabase-issued JWT.
 
-    Supabase signs access tokens HS256 with the project's JWT secret; `sub` is the user's
-    auth.users UUID and `aud` is "authenticated". We only verify — the worker never mints
-    tokens. 401 if the header is missing or the token fails verification/expiry.
+    Modern Supabase projects sign access tokens ES256 with a private key; we verify with the
+    public key from the project JWKS endpoint (`settings.jwks_url`). Legacy HS256 shared-secret
+    projects are supported as a fallback (`supabase_jwt_secret`). `sub` is the user's auth.users
+    UUID and `aud` is "authenticated". We only verify — the worker never mints tokens. 401 if the
+    header is missing or the token fails verification/expiry.
     """
     if creds is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated")
@@ -88,14 +98,22 @@ def get_current_user(
     import jwt
 
     options = {} if settings.jwt_verify_audience else {"verify_aud": False}
+    aud = settings.jwt_audience if settings.jwt_verify_audience else None
+    token = creds.credentials
     try:
-        claims = jwt.decode(
-            creds.credentials,
-            settings.supabase_jwt_secret,
-            algorithms=[settings.jwt_algorithm],
-            audience=settings.jwt_audience if settings.jwt_verify_audience else None,
-            options=options,
-        )
+        jwks_url = settings.jwks_url
+        if jwks_url:
+            key = _jwks_client(jwks_url).get_signing_key_from_jwt(token).key
+            claims = jwt.decode(token, key, algorithms=["ES256", "RS256"], audience=aud, options=options)
+        elif settings.supabase_jwt_secret:
+            claims = jwt.decode(
+                token, settings.supabase_jwt_secret, algorithms=["HS256"], audience=aud, options=options
+            )
+        else:
+            raise RuntimeError(
+                "No JWT verification configured: set SUPABASE_URL/SUPABASE_JWKS_URL (ES256) "
+                "or SUPABASE_JWT_SECRET (HS256)."
+            )
         sub = claims["sub"]
     except Exception as exc:  # noqa: BLE001 - any decode/verify failure is an auth failure
         raise HTTPException(
