@@ -1,3 +1,6 @@
+// Must run before @supabase/supabase-js builds any request URLs on React Native.
+import 'react-native-url-polyfill/auto';
+
 import {
   Fraunces_400Regular,
   Fraunces_500Medium,

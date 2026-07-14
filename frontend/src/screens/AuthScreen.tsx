@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ApiError } from '../api/client';
 import { useSession } from '../store/session';
 import { useTheme } from '../theme/ThemeProvider';
 import { space } from '../theme/tokens';
@@ -35,7 +34,7 @@ export function AuthScreen() {
       if (isLogin) await login(username.trim(), password);
       else await register(username.trim(), password);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Something went wrong. Try again.');
+      setError(e instanceof Error ? e.message : 'Something went wrong. Try again.');
     } finally {
       setBusy(false);
     }

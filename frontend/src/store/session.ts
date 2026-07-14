@@ -1,13 +1,12 @@
-import * as SecureStore from 'expo-secure-store';
+import type { Session } from '@supabase/supabase-js';
 import { create } from 'zustand';
 
-import { api, setAuthToken, setUnauthorizedHandler } from '../api/client';
-
-const TOKEN_KEY = 'dishport.token';
+import { setAuthToken, setUnauthorizedHandler } from '../api/client';
+import { supabase, usernameToEmail } from '../lib/supabase';
 
 interface SessionState {
   token: string | null;
-  userId: number | null;
+  userId: string | null; // Supabase user UUID (was a numeric id under the old worker auth)
   ready: boolean; // hydration finished
   authenticated: boolean;
   hydrate: () => Promise<void>;
@@ -17,48 +16,71 @@ interface SessionState {
 }
 
 /**
- * The auth seam. Holds the JWT in SecureStore and feeds it to the API client. A 401 from any
- * request triggers logout, dropping the app back to the Auth screen.
+ * The auth seam. Supabase owns the session (persisted in SecureStore via the client's storage
+ * adapter and auto-refreshed). We mirror the current Supabase session into this store and feed the
+ * access token to the worker API client. A 401 from any worker request triggers logout, dropping
+ * the app back to the Auth screen.
  */
-export const useSession = create<SessionState>((set, get) => ({
-  token: null,
-  userId: null,
-  ready: false,
-  authenticated: false,
-
-  hydrate: async () => {
-    setUnauthorizedHandler(() => {
-      void get().logout();
-    });
-    try {
-      const token = await SecureStore.getItemAsync(TOKEN_KEY);
-      if (token) {
-        setAuthToken(token);
-        set({ token, authenticated: true });
-      }
-    } catch {
-      // never block startup on storage
+export const useSession = create<SessionState>((set, get) => {
+  // Push a Supabase session (or lack thereof) into the store and the API client in one place, so
+  // hydrate(), login/register, onAuthStateChange (token refresh, cross-tab), and logout all agree.
+  const applySession = (session: Session | null) => {
+    if (session) {
+      setAuthToken(session.access_token);
+      set({ token: session.access_token, userId: session.user.id, authenticated: true });
+    } else {
+      setAuthToken(null);
+      set({ token: null, userId: null, authenticated: false });
     }
-    set({ ready: true });
-  },
+  };
 
-  login: async (username, password) => {
-    const res = await api.login(username, password);
-    await SecureStore.setItemAsync(TOKEN_KEY, res.access_token);
-    setAuthToken(res.access_token);
-    set({ token: res.access_token, userId: res.user_id, authenticated: true });
-  },
+  return {
+    token: null,
+    userId: null,
+    ready: false,
+    authenticated: false,
 
-  register: async (username, password) => {
-    const res = await api.register(username, password);
-    await SecureStore.setItemAsync(TOKEN_KEY, res.access_token);
-    setAuthToken(res.access_token);
-    set({ token: res.access_token, userId: res.user_id, authenticated: true });
-  },
+    hydrate: async () => {
+      setUnauthorizedHandler(() => {
+        void get().logout();
+      });
+      // Keep token/authenticated in sync with refreshes and sign-in/out that happen elsewhere.
+      supabase.auth.onAuthStateChange((_event, session) => {
+        applySession(session);
+      });
+      try {
+        const { data } = await supabase.auth.getSession();
+        applySession(data.session);
+      } catch {
+        // never block startup on storage/network
+      }
+      set({ ready: true });
+    },
 
-  logout: async () => {
-    await SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => undefined);
-    setAuthToken(null);
-    set({ token: null, userId: null, authenticated: false });
-  },
-}));
+    login: async (username, password) => {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: usernameToEmail(username),
+        password,
+      });
+      if (error) throw error;
+      applySession(data.session);
+    },
+
+    register: async (username, password) => {
+      const { data, error } = await supabase.auth.signUp({
+        email: usernameToEmail(username),
+        password,
+        // Lands in user_metadata; a DB trigger creates the profile row from this username.
+        options: { data: { username } },
+      });
+      if (error) throw error;
+      // With email confirmation disabled, signUp returns an active session; apply it if present.
+      applySession(data.session);
+    },
+
+    logout: async () => {
+      await supabase.auth.signOut().catch(() => undefined);
+      applySession(null);
+    },
+  };
+});

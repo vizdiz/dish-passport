@@ -46,14 +46,14 @@ export interface RecommendationItem {
 }
 
 export interface RecommendationsResponse {
-  user_id: number;
+  user_id: string;
   n: number;
   cold_start: boolean;
   recommendations: RecommendationItem[];
 }
 
 export interface TasteProfile {
-  user_id: number;
+  user_id: string;
   n_dishes: number;
   flavor_factor_pref: FactorScore[] | null;
   representative_dishes: Dish[];
@@ -75,10 +75,4 @@ export interface LogRequest {
   rating?: number;
   notes?: string;
   photo_url?: string;
-}
-
-export interface TokenResponse {
-  access_token: string;
-  token_type: string;
-  user_id: number;
 }

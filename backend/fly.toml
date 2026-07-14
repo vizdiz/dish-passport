@@ -1,0 +1,37 @@
+# Fly.io config for the Dish Passport worker (FastAPI ingestion/recommendation API).
+# Builds backend/Dockerfile. Deploy from this directory: `fly deploy`.
+#
+# Secrets are NOT stored here — set them with `fly secrets set` (see DEPLOY_FLY.md):
+#   SUPABASE_DB_URL, SUPABASE_JWT_SECRET, DP_OPENAI_API_KEY
+app = "dishport-worker"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  DP_LOG_LEVEL = "INFO"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 40
+    hard_limit = 60
+
+  # Liveness/readiness: GET /health returns {"status":"ok"} (see app/main.py).
+  [[http_service.checks]]
+    method = "get"
+    path = "/health"
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

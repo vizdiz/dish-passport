@@ -57,7 +57,7 @@ class SvdModel:
 
 @dataclass(frozen=True)
 class TasteProfile:
-    user_id: int
+    user_id: str                               # Supabase auth user UUID
     liked_centroid: Optional[list[float]]      # 1536, or None if no positive logs
     disliked_centroid: Optional[list[float]]   # 1536, or None
     flavor_factor_pref: Optional[list[float]]  # 4, mean latent factors over liked dishes
@@ -66,7 +66,7 @@ class TasteProfile:
 
 @dataclass(frozen=True)
 class ImpressionRow:
-    user_id: int
+    user_id: str                               # Supabase auth user UUID
     dish_id: int
     shown_at: datetime
     context: str                   # 'feed' | 'recs' | 'similar'
@@ -104,10 +104,10 @@ class Storage(Protocol):
 
 @runtime_checkable
 class DishRepository(Protocol):
-    # ---- auth / users ----
-    async def create_user(self, username: str, password_hash: str) -> int: ...
-    async def get_user_by_username(self, username: str) -> Optional[tuple[int, str]]: ...
-    async def log_belongs_to(self, log_id: int, user_id: int) -> bool: ...
+    # ---- users ----
+    # Identity is owned by Supabase (auth.users); the worker only verifies JWTs and reads/writes
+    # rows keyed by the user's UUID. There is NO create_user / get_user_by_username here.
+    async def log_belongs_to(self, log_id: int, user_id: str) -> bool: ...
 
     async def get_dish(self, dish_id: int) -> Optional[DishRecord]: ...
     async def nearest(self, embedding: Sequence[float]) -> Optional[Neighbor]: ...
@@ -121,7 +121,7 @@ class DishRepository(Protocol):
     async def insert_log(
         self,
         *,
-        user_id: int,
+        user_id: str,
         dish_id: int,
         sentiment: str,
         rating: Optional[int],
@@ -141,22 +141,22 @@ class DishRepository(Protocol):
     async def get_dish_factors(self, dish_id: int) -> Optional[tuple[list[float], str]]: ...
 
     # ---- collaborative filtering (Service 4) ----
-    async def all_logs(self) -> list[tuple[int, int, str]]: ...   # (user_id, dish_id, sentiment)
+    async def all_logs(self) -> list[tuple[str, int, str]]: ...   # (user_id, dish_id, sentiment)
     async def save_cf_factors(
         self,
-        user_factors: Sequence[tuple[int, list[float]]],
+        user_factors: Sequence[tuple[str, list[float]]],   # (user_id UUID, factors)
         item_factors: Sequence[tuple[int, list[float]]],
         model_version: str,
     ) -> None: ...
-    async def get_cf_user_factors(self, user_id: int) -> Optional[tuple[list[float], str]]: ...
+    async def get_cf_user_factors(self, user_id: str) -> Optional[tuple[list[float], str]]: ...
     async def get_cf_item_factors(self, dish_id: int) -> Optional[tuple[list[float], str]]: ...
     async def all_cf_item_factors(self) -> list[tuple[int, list[float]]]: ...
 
     # ---- recommendation / taste profiles (Service 5) ----
-    async def all_user_ids(self) -> list[int]: ...
-    async def user_logs(self, user_id: int) -> list[tuple[int, str]]: ...   # (dish_id, sentiment)
+    async def all_user_ids(self) -> list[str]: ...
+    async def user_logs(self, user_id: str) -> list[tuple[int, str]]: ...   # (dish_id, sentiment)
     async def user_impressions(
-        self, user_id: int
+        self, user_id: str
     ) -> list[tuple[int, datetime, bool]]: ...                              # (dish_id, shown_at, converted)
     async def dish_embeddings(self, dish_ids: Sequence[int]) -> dict[int, list[float]]: ...
     async def vector_topk(
@@ -170,4 +170,4 @@ class DishRepository(Protocol):
     ) -> dict[int, tuple[float, float]]: ...                                # id -> (cos_liked, cos_disliked)
     async def popular_dishes(self, k: int, exclude_ids: Sequence[int]) -> list[int]: ...
     async def save_taste_profile(self, profile: TasteProfile) -> None: ...
-    async def get_taste_profile(self, user_id: int) -> Optional[TasteProfile]: ...
+    async def get_taste_profile(self, user_id: str) -> Optional[TasteProfile]: ...

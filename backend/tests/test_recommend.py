@@ -15,6 +15,13 @@ from tests.fakes import StubEmbedder, StubNormalizer, vec_cos_to_axis0
 # 10 dishes laid out along a cosine gradient so neighbors are well-ordered.
 N_DISHES = 10
 
+# The warm user's id is a Supabase auth UUID (string). Matches conftest's default auth user so
+# the endpoint tests authenticate as this same user. Other seeded users only feed CF overlap /
+# cold paths and are never serialized, so plain ints are fine for them.
+WARM_USER = "00000000-0000-0000-0000-000000000001"
+USER_CF = "00000000-0000-0000-0000-000000000002"    # CF-overlap peer
+USER_COLD = "00000000-0000-0000-0000-000000000004"  # only 2 logs -> cold
+
 
 def _flavor(i: int) -> list[float]:
     v = [0.2] * 10
@@ -33,13 +40,13 @@ async def _build_world(repo):
         await repo.insert_log(user_id=uid, dish_id=ids[idx], sentiment=sentiment,
                               rating=None, notes=None)
 
-    for idx in range(5):           # user 1: warm (6 logs incl. a dislike)
-        await log(1, idx)
-    await log(1, 9, "disliked")
-    for idx in range(3):           # user 2: shares likes with user 1 (CF overlap)
-        await log(2, idx)
-    for idx in range(2):           # user 4: cold (2 logs)
-        await log(4, idx)
+    for idx in range(5):           # warm user: 6 logs incl. a dislike
+        await log(WARM_USER, idx)
+    await log(WARM_USER, 9, "disliked")
+    for idx in range(3):           # CF peer: shares likes with the warm user (CF overlap)
+        await log(USER_CF, idx)
+    for idx in range(2):           # cold user: 2 logs
+        await log(USER_COLD, idx)
 
     await recompute_svd(repo)
     await retrain_als(repo, n_factors=8)
@@ -71,7 +78,7 @@ async def test_warm_ensemble_excludes_logged_and_disliked(repo):
     ids = await _build_world(repo)
     logged_user1 = set(ids[:5]) | {ids[9]}
 
-    result = await recommend(repo, user_id=1, n=5)
+    result = await recommend(repo, user_id=WARM_USER, n=5)
 
     assert result.cold_start is False
     rec_ids = [r.dish.id for r in result.recommendations]
@@ -85,7 +92,7 @@ async def test_warm_ensemble_excludes_logged_and_disliked(repo):
 async def test_cold_start_is_pure_vector(repo):
     ids = await _build_world(repo)
 
-    result = await recommend(repo, user_id=4, n=3)              # 2 logs -> cold
+    result = await recommend(repo, user_id=USER_COLD, n=3)     # 2 logs -> cold
 
     assert result.cold_start is True
     rec_ids = [r.dish.id for r in result.recommendations]
@@ -96,7 +103,7 @@ async def test_cold_start_is_pure_vector(repo):
 async def test_brand_new_user_falls_back_to_popularity(repo):
     await _build_world(repo)
 
-    result = await recommend(repo, user_id=999, n=5)           # never logged
+    result = await recommend(repo, user_id="00000000-0000-0000-0000-000000000999", n=5)  # never logged
 
     assert result.cold_start is True
     assert len(result.recommendations) > 0                      # popularity, not empty
@@ -119,9 +126,9 @@ def test_recommendations_endpoint(repo, make_client):
 
 def test_taste_profile_endpoint_and_404(repo, make_client):
     asyncio.run(_build_world(repo))
-    client = make_client(repo, StubEmbedder(), StubNormalizer(), user=1)
+    client = make_client(repo, StubEmbedder(), StubNormalizer(), user=WARM_USER)
 
-    ok = client.get("/users/me/taste-profile")   # "me" == authenticated user 1
+    ok = client.get("/users/me/taste-profile")   # "me" == authenticated warm user
     assert ok.status_code == 200, ok.text
     body = ok.json()
     assert body["n_dishes"] > 0
@@ -130,5 +137,6 @@ def test_taste_profile_endpoint_and_404(repo, make_client):
     assert body["flavor_factor_pref"] is not None
 
     # A user with no profile yet -> 404 (authenticated as a never-logged user).
-    stranger = make_client(repo, StubEmbedder(), StubNormalizer(), user=424242)
+    stranger = make_client(repo, StubEmbedder(), StubNormalizer(),
+                           user="00000000-0000-0000-0000-0000000f0f0f")
     assert stranger.get("/users/me/taste-profile").status_code == 404

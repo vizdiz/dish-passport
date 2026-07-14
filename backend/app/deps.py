@@ -35,7 +35,7 @@ def get_storage() -> Storage:
 def get_repo() -> DishRepository:  # pragma: no cover - overridden at startup / in tests
     raise RuntimeError(
         "DishRepository is not configured. Wire one via "
-        "app.dependency_overrides[get_repo] (lifespan does this when DP_DATABASE_URL is set)."
+        "app.dependency_overrides[get_repo] (lifespan does this when SUPABASE_DB_URL is set)."
     )
 
 
@@ -75,16 +75,35 @@ _bearer = HTTPBearer(auto_error=False)
 def get_current_user(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     settings: Settings = Depends(get_settings),
-) -> int:
-    """Resolve the authenticated user_id from the Bearer JWT. 401 if missing/invalid."""
+) -> str:
+    """Resolve the authenticated user id (a UUID string) from a Supabase-issued JWT.
+
+    Supabase signs access tokens HS256 with the project's JWT secret; `sub` is the user's
+    auth.users UUID and `aud` is "authenticated". We only verify — the worker never mints
+    tokens. 401 if the header is missing or the token fails verification/expiry.
+    """
     if creds is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated")
-    from app.security import decode_token
 
+    import jwt
+
+    options = {} if settings.jwt_verify_audience else {"verify_aud": False}
     try:
-        return decode_token(creds.credentials, secret=settings.jwt_secret,
-                            algorithm=settings.jwt_algorithm)
-    except Exception as exc:  # noqa: BLE001 - any decode failure is an auth failure
+        claims = jwt.decode(
+            creds.credentials,
+            settings.supabase_jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+            audience=settings.jwt_audience if settings.jwt_verify_audience else None,
+            options=options,
+        )
+        sub = claims["sub"]
+    except Exception as exc:  # noqa: BLE001 - any decode/verify failure is an auth failure
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid or expired token"
         ) from exc
+
+    if not sub:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid or expired token"
+        )
+    return str(sub)

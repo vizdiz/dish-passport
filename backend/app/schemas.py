@@ -12,22 +12,6 @@ Sentiment = Literal["liked", "neutral", "disliked"]
 ImpressionContext = Literal["feed", "recs", "similar"]
 
 
-class RegisterRequest(BaseModel):
-    username: str = Field(min_length=3, max_length=40)
-    password: str = Field(min_length=6, max_length=128)
-
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user_id: int
-
-
 class LogRequest(BaseModel):
     text: Optional[str] = None
     dish_id: Optional[int] = None
@@ -134,7 +118,7 @@ class RecommendationOut(BaseModel):
 
 
 class RecommendationsResponse(BaseModel):
-    user_id: int
+    user_id: str                        # Supabase auth user UUID
     n: int
     cold_start: bool
     recommendations: list[RecommendationOut]
@@ -152,7 +136,7 @@ class PresignResponse(BaseModel):
 
 
 class TasteProfileOut(BaseModel):
-    user_id: int
+    user_id: str                        # Supabase auth user UUID
     n_dishes: int
     flavor_factor_pref: Optional[list[FactorScore]]
     representative_dishes: list[DishOut]

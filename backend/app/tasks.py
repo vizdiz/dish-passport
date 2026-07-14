@@ -26,7 +26,7 @@ T = TypeVar("T")
 async def _with_repo(fn: Callable[[DishRepository], Awaitable[T]]) -> T:
     settings = Settings()
     if not settings.database_url:
-        raise RuntimeError("DP_DATABASE_URL is required for batch tasks")
+        raise RuntimeError("SUPABASE_DB_URL is required for batch tasks")
     pool = await asyncpg.create_pool(dsn=settings.database_url, init=init_connection)
     try:
         return await fn(PgVectorRepository(pool))
