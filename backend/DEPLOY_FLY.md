@@ -19,9 +19,12 @@ The app reads these env vars (see `app/config.py`):
 
 | Env var              | What                                                                 |
 |----------------------|---------------------------------------------------------------------|
-| `SUPABASE_DB_URL`    | asyncpg DSN for Supabase Postgres, e.g. `postgresql://postgres:<pw>@db.<ref>.supabase.co:5432/postgres` (plain `postgresql://`, not a SQLAlchemy `+driver` URL). |
-| `SUPABASE_JWT_SECRET`| Supabase project JWT secret (HS256). Used to verify incoming tokens. |
+| `SUPABASE_DB_URL`    | asyncpg DSN for Supabase Postgres. Use the **session-mode pooler** (IPv4): `postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:5432/postgres`. The direct `db.<ref>.supabase.co` host is IPv6-only. |
+| `SUPABASE_URL`       | Project URL, e.g. `https://<ref>.supabase.co`. The worker derives the JWKS endpoint from it to verify **ES256** tokens (asymmetric — no shared secret). |
 | `DP_OPENAI_API_KEY`  | OpenAI key — powers embeddings and the flavor/normalization call.    |
+
+> Legacy fallback: set `SUPABASE_JWT_SECRET` instead of `SUPABASE_URL` only if your project
+> still signs tokens with a shared HS256 secret. New projects use ES256/JWKS.
 
 > Env naming: Supabase-shared vars use their **plain** names (`SUPABASE_*`); everything else
 > keeps the historical **`DP_`** prefix (`DP_OPENAI_API_KEY`, `DP_LOG_LEVEL`,
@@ -36,12 +39,12 @@ Photo uploads still use Azure Blob (`DP_AZURE_STORAGE_CONNECTION_STRING`,
 cd backend
 
 # 1. Create the app WITHOUT deploying yet (fly.toml already exists, so keep it).
-fly launch --no-deploy --copy-config --name dishport-worker --region sjc
+fly launch --no-deploy --copy-config --name dishport-worker --region yul
 
 # 2. Set secrets (staged; applied on next deploy).
 fly secrets set \
-  SUPABASE_DB_URL='postgresql://postgres:<pw>@db.<ref>.supabase.co:5432/postgres' \
-  SUPABASE_JWT_SECRET='<supabase-jwt-secret>' \
+  SUPABASE_DB_URL='postgresql://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:5432/postgres' \
+  SUPABASE_URL='https://<ref>.supabase.co' \
   DP_OPENAI_API_KEY='<openai-key>'
 
 # 3. Build + ship.

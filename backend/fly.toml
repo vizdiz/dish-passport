@@ -2,9 +2,9 @@
 # Builds backend/Dockerfile. Deploy from this directory: `fly deploy`.
 #
 # Secrets are NOT stored here — set them with `fly secrets set` (see DEPLOY_FLY.md):
-#   SUPABASE_DB_URL, SUPABASE_JWT_SECRET, DP_OPENAI_API_KEY
+#   SUPABASE_DB_URL (session pooler), SUPABASE_URL (for JWKS/ES256 verify), DP_OPENAI_API_KEY
 app = "dishport-worker"
-primary_region = "sjc"
+primary_region = "yul"  # Montreal — co-located with the Supabase ca-central-1 database
 
 [build]
   dockerfile = "Dockerfile"
