@@ -1,0 +1,31 @@
+# Dish Passport — minimal Supabase CLI project config.
+# Full reference: https://supabase.com/docs/guides/cli/config
+project_id = "dishport"
+
+[db]
+# Postgres major version Supabase runs.
+major_version = 15
+
+[db.migrations]
+schema_paths = ["./migrations"]
+
+# pgvector — the `vector` extension is enabled by the first migration
+# (0001_extensions.sql: create extension if not exists vector).
+
+[api]
+enabled = true
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+
+[auth]
+enabled = true
+# Local dev site URL; override per environment in the dashboard for hosted projects.
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000"]
+
+[auth.email]
+# Email/password signups on, with confirmation OFF so username@users.dishport.app
+# pseudo-emails work without any real inbox / verification (prototype).
+enable_signup = true
+enable_confirmations = false
+double_confirm_changes = false

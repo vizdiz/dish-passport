@@ -21,7 +21,10 @@ def make_client():
     a TestClient. Used without the lifespan context, so no real adapters are constructed."""
     created: list[TestClient] = []
 
-    def _make(repo, embedder, normalizer, tau: float = 0.90, user: int = 1) -> TestClient:
+    def _make(
+        repo, embedder, normalizer, tau: float = 0.90,
+        user: str = "00000000-0000-0000-0000-000000000001",
+    ) -> TestClient:
         app.dependency_overrides[deps.get_repo] = lambda: repo
         app.dependency_overrides[deps.get_embedder] = lambda: embedder
         app.dependency_overrides[deps.get_normalizer] = lambda: normalizer

@@ -9,4 +9,4 @@ openai>=1.40
 celery[redis]>=5.3
 azure-storage-blob>=12.19
 pyjwt>=2.8
-bcrypt>=4.1
+cryptography>=42  # ES256 verification of Supabase asymmetric JWTs (PyJWKClient)

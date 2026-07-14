@@ -20,7 +20,6 @@ from app.ports import (
     SvdModel,
     TasteProfile,
 )
-from app.services.errors import UserExists
 
 _DISH_COLS = (
     "id, name, canonical_description, ingredients, prep_method, "
@@ -29,10 +28,19 @@ _DISH_COLS = (
 
 
 async def init_connection(conn: asyncpg.Connection) -> None:
-    """Pool `init`: register pgvector codecs and a jsonb codec (for the SVD model)."""
+    """Pool `init`: register pgvector codecs and a jsonb codec (for the SVD model).
+
+    Also register a *text* codec for `uuid` so Postgres uuid columns round-trip as plain
+    Python `str` in both directions. user_id is a Supabase auth UUID that flows through the
+    app as a string (the `sub` claim), so this lets us pass it straight into queries and read
+    it back as a string with no uuid.UUID conversions.
+    """
     await register_vector(conn)
     await conn.set_type_codec(
         "jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog"
+    )
+    await conn.set_type_codec(
+        "uuid", encoder=str, decoder=str, schema="pg_catalog", format="text"
     )
 
 
@@ -57,25 +65,9 @@ class PgVectorRepository:
     def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool
 
-    # ---- auth / users ----
-    async def create_user(self, username: str, password_hash: str) -> int:
-        async with self._pool.acquire() as conn:
-            try:
-                return await conn.fetchval(
-                    "INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id",
-                    username, password_hash,
-                )
-            except asyncpg.UniqueViolationError as exc:
-                raise UserExists(username) from exc
-
-    async def get_user_by_username(self, username: str) -> Optional[tuple[int, str]]:
-        async with self._pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT id, password_hash FROM users WHERE username = $1", username
-            )
-        return (row["id"], row["password_hash"]) if row is not None else None
-
-    async def log_belongs_to(self, log_id: int, user_id: int) -> bool:
+    # ---- users ----
+    # Identity is owned by Supabase (auth.users). No create/lookup by credentials here.
+    async def log_belongs_to(self, log_id: int, user_id: str) -> bool:
         async with self._pool.acquire() as conn:
             found = await conn.fetchval(
                 "SELECT 1 FROM logs WHERE id = $1 AND user_id = $2", log_id, user_id
@@ -140,27 +132,22 @@ class PgVectorRepository:
     async def insert_log(
         self,
         *,
-        user_id: int,
+        user_id: str,
         dish_id: int,
         sentiment: str,
         rating: Optional[int],
         notes: Optional[str],
         photo_url: Optional[str] = None,
     ) -> int:
+        # user_id is a Supabase auth.users UUID that came from a verified JWT, so the FK on
+        # logs.user_id is always satisfiable — no user-upsert safety net (auth.users is managed
+        # by Supabase; a public.profiles row, if any, is created by the DB trigger, not here).
         async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                await conn.execute(
-                    "INSERT INTO users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING",
-                    user_id,
-                )
-                log_id = await conn.fetchval(
-                    "INSERT INTO logs (user_id, dish_id, sentiment, rating, notes, photo_url) "
-                    "VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-                    user_id, dish_id, sentiment, rating, notes, photo_url,
-                )
-                await conn.execute(
-                    "UPDATE users SET log_count = log_count + 1 WHERE id = $1", user_id
-                )
+            log_id = await conn.fetchval(
+                "INSERT INTO logs (user_id, dish_id, sentiment, rating, notes, photo_url) "
+                "VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+                user_id, dish_id, sentiment, rating, notes, photo_url,
+            )
         return int(log_id)
 
     async def insert_impressions(self, rows: Sequence[ImpressionRow]) -> int:
@@ -273,7 +260,7 @@ class PgVectorRepository:
                         [(did, [float(x) for x in vec], model_version) for did, vec in item_factors],
                     )
 
-    async def get_cf_user_factors(self, user_id: int) -> Optional[tuple[list[float], str]]:
+    async def get_cf_user_factors(self, user_id: str) -> Optional[tuple[list[float], str]]:
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT factors, model_version FROM cf_user_factors WHERE user_id = $1", user_id
@@ -297,19 +284,21 @@ class PgVectorRepository:
         return [(r["dish_id"], [float(x) for x in r["factors"]]) for r in rows]
 
     # ---- recommendation / taste profiles (Service 5) ----
-    async def all_user_ids(self) -> list[int]:
+    async def all_user_ids(self) -> list[str]:
+        # No local users table anymore (auth.users is Supabase-managed). The taste-profile
+        # rebuild only cares about users who have logged, so enumerate distinct log authors.
         async with self._pool.acquire() as conn:
-            rows = await conn.fetch("SELECT id FROM users ORDER BY id")
-        return [r["id"] for r in rows]
+            rows = await conn.fetch("SELECT DISTINCT user_id FROM logs ORDER BY user_id")
+        return [r["user_id"] for r in rows]
 
-    async def user_logs(self, user_id: int) -> list[tuple[int, str]]:
+    async def user_logs(self, user_id: str) -> list[tuple[int, str]]:
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
                 "SELECT dish_id, sentiment FROM logs WHERE user_id = $1 ORDER BY id", user_id
             )
         return [(r["dish_id"], r["sentiment"]) for r in rows]
 
-    async def user_impressions(self, user_id: int):
+    async def user_impressions(self, user_id: str):
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
                 "SELECT dish_id, shown_at, converted FROM impressions WHERE user_id = $1", user_id
@@ -387,7 +376,7 @@ class PgVectorRepository:
                 profile.n_dishes,
             )
 
-    async def get_taste_profile(self, user_id: int) -> Optional[TasteProfile]:
+    async def get_taste_profile(self, user_id: str) -> Optional[TasteProfile]:
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT user_id, liked_centroid, disliked_centroid, flavor_factor_pref, n_dishes "

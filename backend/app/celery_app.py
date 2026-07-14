@@ -2,7 +2,7 @@
 
 Run a worker:  celery -A app.celery_app.celery worker -l info
 Run the beat:  celery -A app.celery_app.celery beat   -l info
-(both need DP_DATABASE_URL set and Redis reachable at DP_CELERY_BROKER_URL.)
+(both need SUPABASE_DB_URL set and Redis reachable at DP_CELERY_BROKER_URL.)
 
 Tasks live in app/tasks.py (loaded via `include`, avoiding a circular import). They wrap the
 async batch services on a short-lived asyncpg pool — the ONLY place those services run in prod.

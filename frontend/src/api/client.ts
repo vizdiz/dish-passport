@@ -9,7 +9,6 @@ import type {
   RecommendationsResponse,
   SimilarResponse,
   TasteProfile,
-  TokenResponse,
 } from './types';
 
 export class ApiError extends Error {
@@ -23,7 +22,9 @@ export class ApiError extends Error {
 }
 
 // Auth state lives at module scope so every request carries the bearer token, and a 401
-// anywhere can hand control back to the session (log out). The session store wires both.
+// anywhere can hand control back to the session (log out). The session store wires both. The
+// token is now the Supabase session access token (set via setAuthToken from the session store /
+// onAuthStateChange), used only to authenticate calls to the worker API.
 let authToken: string | null = null;
 let onUnauthorized: (() => void) | null = null;
 
@@ -44,7 +45,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   const res = await fetch(`${API_URL}${path}`, { ...init, headers });
 
-  if (res.status === 401 && onUnauthorized && !path.startsWith('/auth/')) {
+  if (res.status === 401 && onUnauthorized) {
     onUnauthorized();
   }
   if (!res.ok) {
@@ -69,17 +70,6 @@ interface PresignResponse {
 }
 
 export const api = {
-  register: (username: string, password: string) =>
-    request<TokenResponse>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-    }),
-  login: (username: string, password: string) =>
-    request<TokenResponse>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-    }),
-
   getDish: (id: number) => request<Dish>(`/dishes/${id}`),
   getSimilar: (id: number, n = 10) => request<SimilarResponse>(`/dishes/${id}/similar?n=${n}`),
   getRecommendations: (n = 10) => request<RecommendationsResponse>(`/recommendations?n=${n}`),
