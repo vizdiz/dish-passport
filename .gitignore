@@ -41,3 +41,6 @@ htmlcov/
 frontend/android/
 frontend/ios/
 *.apk
+
+# ---- verify-android skill: regenerable proof artifact ----
+.claude/skills/verify-android/screenshot.png
