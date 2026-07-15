@@ -30,8 +30,8 @@ describe('flavor tokens are derived by formula', () => {
 });
 
 describe('type scale', () => {
-  it('uses Fraunces for display, Hanken for body', () => {
-    expect(typography.display.fontFamily).toBe('Fraunces_600SemiBold');
-    expect(typography.body.fontFamily).toBe('HankenGrotesk_400Regular');
+  it('uses Inter for display and body', () => {
+    expect(typography.display.fontFamily).toBe('Inter_700Bold');
+    expect(typography.body.fontFamily).toBe('Inter_400Regular');
   });
 });

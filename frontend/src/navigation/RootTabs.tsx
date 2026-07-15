@@ -26,7 +26,7 @@ export function RootTabs() {
         tabBarActiveTintColor: c.accent,
         tabBarInactiveTintColor: c.hint,
         tabBarStyle: { backgroundColor: c.surface, borderTopColor: c.hairline },
-        tabBarLabelStyle: { fontFamily: fonts.hanken[500], fontSize: 11 },
+        tabBarLabelStyle: { fontFamily: fonts.inter[500], fontSize: 11 },
         tabBarIcon: ({ color, size }) => (
           <Ionicons name={ICONS[route.name] ?? 'ellipse-outline'} size={size} color={color} />
         ),

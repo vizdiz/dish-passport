@@ -8,8 +8,8 @@
  *   ink  = base darkened ~25%          (text/label on tint)
  *   dark mode keeps `base` for the mark and lightens `ink` one step for legibility.
  *
- * Fonts: Fraunces for dish names / screen titles / empty-state headlines ONLY; Hanken Grotesk
- * for everything else (body, labels, buttons, all numbers with tabular figures).
+ * Font: Inter everywhere (a clean cross-platform grotesk; Material's Roboto stand-in). Titles vs
+ * body differ by size + weight, not typeface. All numbers use tabular figures.
  */
 
 // ----------------------------------------------------------------------------- color math
@@ -137,21 +137,17 @@ export function flavorToken(dim: FlavorDim): FlavorToken {
 
 // ----------------------------------------------------------------------------- fonts
 
+// One typeface everywhere (Inter — a clean grotesk; stands in for Material's Roboto). Hierarchy
+// comes from size + weight only, never colored boxes. 400 + 600 do the work; 700 is for the
+// display/wordmark alone.
 export const fonts = {
-  fraunces: {
-    400: 'Fraunces_400Regular',
-    500: 'Fraunces_500Medium',
-    600: 'Fraunces_600SemiBold',
-  },
-  hanken: {
-    400: 'HankenGrotesk_400Regular',
-    500: 'HankenGrotesk_500Medium',
-    600: 'HankenGrotesk_600SemiBold',
-    700: 'HankenGrotesk_700Bold',
+  inter: {
+    400: 'Inter_400Regular',
+    500: 'Inter_500Medium',
+    600: 'Inter_600SemiBold',
+    700: 'Inter_700Bold',
   },
 } as const;
-
-type FontFamily = 'fraunces' | 'hanken';
 
 export interface TypeStyle {
   fontFamily: string;
@@ -162,32 +158,33 @@ export interface TypeStyle {
 }
 
 function type(
-  family: FontFamily,
   weight: 400 | 500 | 600 | 700,
   size: number,
   lineHeight: number,
 ): TypeStyle {
-  const fontFamily = (fonts[family] as Record<number, string>)[weight];
-  // Fraunces ships with -2% tracking per the spec; Hanken sits at default.
-  const letterSpacing = family === 'fraunces' ? -0.02 * size : undefined;
-  return { fontFamily, fontSize: size, lineHeight, fontWeight: String(weight) as TypeStyle['fontWeight'], letterSpacing };
+  // Inter reads best with slight negative tracking on large sizes; body/labels sit at default.
+  const letterSpacing = size >= 22 ? -0.014 * size : undefined;
+  return { fontFamily: fonts.inter[weight], fontSize: size, lineHeight, fontWeight: String(weight) as TypeStyle['fontWeight'], letterSpacing };
 }
 
-/** Type scale: size / line-height / weight / family, exactly per spec. */
+/**
+ * Ratio type scale (~1.25 steps, Material-3 / Apple-aligned): body 16 → 20 → 26 → 32.
+ * Two weights per surface (Regular 400 + Semibold 600), Bold only for `display`.
+ */
 export const typography = {
-  display: type('fraunces', 600, 28, 34),
-  h1: type('fraunces', 600, 24, 30),
-  h2: type('hanken', 600, 18, 24),
-  title: type('hanken', 600, 16, 22),
-  body: type('hanken', 400, 15, 22),
-  label: type('hanken', 500, 13, 18),
-  caption: type('hanken', 500, 12, 16),
-  micro: type('hanken', 500, 11, 14),
+  display: type(700, 32, 38),
+  h1: type(600, 26, 32),
+  h2: type(600, 20, 26),
+  title: type(600, 17, 24),
+  body: type(400, 16, 24),
+  label: type(500, 13, 18),
+  caption: type(500, 12, 16),
+  micro: type(500, 11, 14),
 } as const;
 
 export type TypeVariant = keyof typeof typography;
 
-/** Apply to any numeric text so figures align (Hanken tabular figures). */
+/** Apply to any numeric text so figures align (Inter tabular figures). */
 export const tabularNumbers = { fontVariant: ['tabular-nums'] as ['tabular-nums'] };
 
 // ----------------------------------------------------------------------------- layout
