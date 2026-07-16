@@ -232,6 +232,24 @@ export const elevation = {
   },
 } as const;
 
+// ----------------------------------------------------------------------------- motion
+
+/**
+ * Motion — spring-based and short (Material-3 / HIG aligned): a physical settle, never linear
+ * easing. Configs feed React Native's `Animated.spring` (useNativeDriver). Mirrors the motion
+ * section of the design-system reference.
+ */
+export const motion = {
+  /** Button / card press feedback — fast settle ≈180ms. */
+  press: { stiffness: 300, damping: 20, mass: 0.6 },
+  /** List / card entrance — gentle overshoot ≈320ms. */
+  enter: { stiffness: 180, damping: 18, mass: 0.9 },
+  /** Scale target while pressed. */
+  pressScale: 0.96,
+  /** Entrance travel (px) the item rises from. */
+  enterTravel: 12,
+} as const;
+
 // ----------------------------------------------------------------------------- dark mode
 
 /** Dark palette: backgrounds invert toward ink, flavor marks keep their `base`. */

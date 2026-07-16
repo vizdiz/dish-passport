@@ -1,13 +1,15 @@
 import { Image } from 'expo-image';
-import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, StyleSheet, View } from 'react-native';
 
 import type { Dish, Sentiment } from '../api/types';
 import { useTheme } from '../theme/ThemeProvider';
-import { FLAVOR_DIMS, flavor, flavorInk, radius, space, type FlavorDim } from '../theme/tokens';
+import { FLAVOR_DIMS, flavor, flavorInk, motion, radius, space, type FlavorDim } from '../theme/tokens';
 import { Card } from '../ui/Card';
 import { Chip } from '../ui/Chip';
+import { PressableScale } from '../ui/PressableScale';
 import { Text } from '../ui/Text';
+import { useReducedMotion } from '../ui/useReducedMotion';
 import { FlavorFingerprint } from './FlavorFingerprint';
 import { SentimentControl } from './SentimentControl';
 
@@ -28,11 +30,28 @@ function topFlavors(scores: Record<string, number>, n = 3): { dim: FlavorDim; va
     .slice(0, n);
 }
 
-/** The hero. Photo (4:3) · Fraunces name · spectrum fingerprint · top-3 flavor chips ·
- * optional explanation · optional sentiment control. */
+/** The hero. Photo (4:3) · Inter name · spectrum fingerprint · top-3 flavor chips ·
+ * optional explanation · optional sentiment control. Springs in on mount (`enter` token). */
 export function DishCard({ dish, photoUrl, explanation, sentiment, onChangeSentiment, onPress }: Props) {
   const { scheme, c } = useTheme();
   const top = topFlavors(dish.flavor);
+  const reduced = useReducedMotion();
+  const enter = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (reduced) {
+      enter.setValue(1);
+      return;
+    }
+    Animated.spring(enter, { toValue: 1, useNativeDriver: true, ...motion.enter }).start();
+  }, [enter, reduced]);
+
+  const enterStyle = {
+    opacity: enter,
+    transform: [
+      { translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [motion.enterTravel, 0] }) },
+    ],
+  };
 
   const content = (
     <Card padded={false}>
@@ -73,21 +92,24 @@ export function DishCard({ dish, photoUrl, explanation, sentiment, onChangeSenti
     </Card>
   );
 
-  if (onPress) {
-    return (
-      <Pressable onPress={onPress} accessibilityRole="button">
-        {content}
-      </Pressable>
-    );
-  }
-  return content;
+  return (
+    <Animated.View style={enterStyle}>
+      {onPress ? (
+        <PressableScale onPress={onPress} accessibilityRole="button">
+          {content}
+        </PressableScale>
+      ) : (
+        content
+      )}
+    </Animated.View>
+  );
 }
 
 const styles = StyleSheet.create({
   photo: { width: '100%', aspectRatio: 4 / 3, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
   placeholder: { alignItems: 'center', justifyContent: 'center' },
   body: { padding: space.lg, gap: space.md },
-  name: { fontSize: 20, lineHeight: 26 }, // Fraunces (h1), sized for a card
+  name: { fontSize: 20, lineHeight: 26 }, // Inter (h1), sized for a card
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
 });
 

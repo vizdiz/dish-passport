@@ -1,9 +1,10 @@
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import type { Sentiment } from '../api/types';
 import { useTheme } from '../theme/ThemeProvider';
 import { radius, space } from '../theme/tokens';
+import { PressableScale } from '../ui/PressableScale';
 import { Text } from '../ui/Text';
 
 const SEGMENTS: { value: Sentiment; label: string }[] = [
@@ -31,7 +32,7 @@ export function SentimentControl({ value, onChange }: Props) {
         const fg = selected ? (danger ? c.danger : c.ink) : c.muted;
         const borderColor = selected ? (danger ? c.danger : c.ink) : c.hairline;
         return (
-          <Pressable
+          <PressableScale
             key={seg.value}
             onPress={() => onChange(seg.value)}
             accessibilityRole="radio"
@@ -48,7 +49,7 @@ export function SentimentControl({ value, onChange }: Props) {
             <Text variant="label" color={fg}>
               {seg.label}
             </Text>
-          </Pressable>
+          </PressableScale>
         );
       })}
     </View>
